@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" version="29.0.3">
   <diagram name="Page-1" id="L3zlEbaJQi9qudh6UswT">
-    <mxGraphModel dx="1426" dy="777" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+    <mxGraphModel dx="619" dy="1035" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -200,7 +200,7 @@
         <mxCell id="AcHef5TYvR0VwFDZ75DH-16" value="Review MP3 / Transcript&amp;nbsp;&lt;div&gt;(optional)&lt;/div&gt;" style="text;whiteSpace=wrap;html=1;align=center;" vertex="1" parent="1">
           <mxGeometry x="953" y="626" width="150" height="40" as="geometry" />
         </mxCell>
-        <mxCell id="AcHef5TYvR0VwFDZ75DH-19" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;Admin/Observability&lt;/span&gt;" style="swimlane;html=1;fillColor=#EFEBE9;whiteSpace=wrap;gradientColor=#FFFFFF;" vertex="1" parent="1">
+        <mxCell id="AcHef5TYvR0VwFDZ75DH-19" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;Admin/Observability&lt;/span&gt;" style="swimlane;html=1;fillColor=#FFCE9F;whiteSpace=wrap;gradientColor=#FFFFFF;" vertex="1" parent="1">
           <mxGeometry x="882" y="719" width="466" height="190" as="geometry" />
         </mxCell>
         <mxCell id="X-5qXeeowePOszNmOhnO-79" value="&lt;div&gt;Query&amp;nbsp;&lt;/div&gt;&lt;div&gt;Metadata&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;(Episodes)&lt;/span&gt;&lt;/div&gt;" style="text;whiteSpace=wrap;html=1;align=center;" parent="AcHef5TYvR0VwFDZ75DH-19" vertex="1">
@@ -209,7 +209,7 @@
         <mxCell id="AcHef5TYvR0VwFDZ75DH-23" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;Delivery Layer&lt;/span&gt;" style="swimlane;html=1;fillColor=#F3E5F5;whiteSpace=wrap;labelBorderColor=light-dark(#C6BCBC,#EDEDED);gradientColor=#FEFEFE;" vertex="1" parent="1">
           <mxGeometry x="959" y="411.61" width="389" height="165.78" as="geometry" />
         </mxCell>
-        <mxCell id="AcHef5TYvR0VwFDZ75DH-24" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;Storage Layer&lt;/span&gt;" style="swimlane;html=1;fillColor=#E8F5E9;whiteSpace=wrap;startSize=23;gradientColor=#FFFFFF;" vertex="1" parent="1">
+        <mxCell id="AcHef5TYvR0VwFDZ75DH-24" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;Storage Layer&lt;/span&gt;" style="swimlane;html=1;fillColor=#D9E6DA;whiteSpace=wrap;startSize=23;gradientColor=#FFFFFF;" vertex="1" parent="1">
           <mxGeometry x="740" y="328" width="121" height="612" as="geometry" />
         </mxCell>
         <mxCell id="AcHef5TYvR0VwFDZ75DH-26" value="&lt;span style=&quot;font-weight: normal;&quot;&gt;Data Ingestion&lt;/span&gt;" style="swimlane;html=1;whiteSpace=wrap;startSize=23;rounded=0;glass=0;opacity=30;fillColor=#dae8fc;swimlaneFillColor=default;gradientColor=#7ea6e0;strokeColor=#6c8ebf;" vertex="1" parent="1">
