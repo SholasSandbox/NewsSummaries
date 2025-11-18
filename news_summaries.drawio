@@ -78,7 +78,7 @@
         <mxCell id="WfmK3D_Fio5ZgeCk6Whs-12" value="" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#232F3D;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;pointerEvents=1;shape=mxgraph.aws4.users;" parent="X-5qXeeowePOszNmOhnO-28" vertex="1">
           <mxGeometry x="3" width="78" height="78" as="geometry" />
         </mxCell>
-        <mxCell id="X-5qXeeowePOszNmOhnO-27" value="&lt;span style=&quot;font-size: 12px;&quot;&gt;users/editors&lt;/span&gt;&lt;div&gt;&lt;span style=&quot;font-size: 12px;&quot;&gt;(RSS+ MP3&lt;/span&gt;&lt;/div&gt;" style="text;strokeColor=none;fillColor=none;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;" parent="X-5qXeeowePOszNmOhnO-28" vertex="1">
+        <mxCell id="X-5qXeeowePOszNmOhnO-27" value="&lt;span style=&quot;font-size: 12px;&quot;&gt;users&lt;/span&gt;&lt;div&gt;&lt;span style=&quot;font-size: 12px;&quot;&gt;(RSS+ MP3&lt;/span&gt;&lt;/div&gt;" style="text;strokeColor=none;fillColor=none;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;" parent="X-5qXeeowePOszNmOhnO-28" vertex="1">
           <mxGeometry x="2" y="89" width="80" height="26.22" as="geometry" />
         </mxCell>
         <mxCell id="X-5qXeeowePOszNmOhnO-45" style="edgeStyle=none;curved=1;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=12;startSize=8;endSize=8;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;" parent="1" source="WfmK3D_Fio5ZgeCk6Whs-4" target="WfmK3D_Fio5ZgeCk6Whs-7" edge="1">
