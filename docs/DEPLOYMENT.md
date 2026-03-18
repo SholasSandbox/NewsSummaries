@@ -1,5 +1,8 @@
 # Deployment Guide — NewsSummaries
 
+> For a deep-dive on what each Lambda function does internally, see
+> [docs/LAMBDA_INTERNALS.md](LAMBDA_INTERNALS.md).
+
 ## Prerequisites
 
 | Tool | Minimum version | Install |
@@ -107,6 +110,10 @@ export TF_VAR_openai_api_key="sk-your-openai-key-here"
 
 # NewsAPI.org key — set to DISABLED to skip
 export TF_VAR_news_api_key="your-newsapi-key-or-DISABLED"
+
+# Episodes API admin key — required when enable_api_gateway = true
+# Leave empty ("") to disable API auth (dev/test only)
+export TF_VAR_admin_api_key="choose-a-strong-random-string"
 ```
 
 ---
@@ -121,8 +128,8 @@ make build
 ```
 
 This installs Python dependencies for each function into `dist/ingest_news/`,
-`dist/generate_summaries/`, and `dist/generate_audio/`. Terraform's `archive_file`
-data source then zips these directories automatically.
+`dist/generate_summaries/`, `dist/generate_audio/`, and `dist/episodes_api/`.
+Terraform's `archive_file` data source then zips these directories automatically.
 
 ---
 
@@ -187,6 +194,8 @@ Key outputs:
 | `podcast_feed_url` | Full URL of the RSS podcast feed |
 | `content_bucket_name` | S3 bucket for all content |
 | `episodes_table_name` | DynamoDB table name |
+| `episodes_api_function_arn` | ARN of the Episodes API Lambda (Lambda 4) |
+| `episodes_api_url` | API Gateway URL (empty when `enable_api_gateway = false`) |
 
 ---
 
@@ -209,6 +218,7 @@ Expected response:
 make logs-ingest     # IngestNews CloudWatch logs
 make logs-summaries  # GenerateSummaries logs
 make logs-audio      # GenerateAudio logs
+make logs-api        # EpisodesAPI logs
 ```
 
 ### 3. Verify RSS feed
@@ -225,6 +235,28 @@ aws dynamodb scan \
   --table-name news-summaries-dev-episodes \
   --limit 5 \
   --profile news-summaries
+```
+
+### 5. Query the Episodes API (when `enable_api_gateway = true`)
+
+```bash
+API_URL=$(cd terraform && terraform output -raw episodes_api_url)
+
+# List today's episodes
+curl -s -H "Authorization: Bearer ${TF_VAR_admin_api_key}" \
+  "${API_URL}/episodes?date=$(date +%Y-%m-%d)" | python3 -m json.tool
+
+# Get presigned audio URL for a specific episode
+curl -s -H "Authorization: Bearer ${TF_VAR_admin_api_key}" \
+  "${API_URL}/episodes/{episode_id}/audio" | python3 -m json.tool
+```
+
+To enable the API Gateway in dev (off by default to save cost):
+```bash
+# In terraform/terraform.tfvars
+enable_api_gateway = true
+
+make deploy-dev
 ```
 
 ---
@@ -271,6 +303,7 @@ Required GitHub Secrets:
 | `TF_STATE_BUCKET` | S3 bucket name for Terraform state |
 | `TF_VAR_openai_api_key` | OpenAI API key |
 | `TF_VAR_news_api_key` | NewsAPI key (`DISABLED` to skip) |
+| `TF_VAR_admin_api_key` | Episodes API bearer token (set to `""` in dev) |
 | `ALERT_EMAIL` | (optional) email for CloudWatch alarms |
 
 ### Setting up AWS OIDC for GitHub Actions

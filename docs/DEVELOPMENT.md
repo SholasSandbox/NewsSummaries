@@ -50,13 +50,16 @@ NewsSummaries/
 ├── .env.example                    # Environment variable template
 ├── src/
 │   ├── ingest_news/
-│   │   ├── handler.py              # Lambda handler
+│   │   ├── handler.py              # Lambda 1 handler
 │   │   └── requirements.txt
 │   ├── generate_summaries/
-│   │   ├── handler.py
+│   │   ├── handler.py              # Lambda 2 handler
 │   │   └── requirements.txt
 │   ├── generate_audio/
-│   │   ├── handler.py
+│   │   ├── handler.py              # Lambda 3 handler
+│   │   └── requirements.txt
+│   ├── episodes_api/
+│   │   ├── handler.py              # Lambda 4 handler (Episodes API)
 │   │   └── requirements.txt
 │   └── shared/
 │       ├── __init__.py
@@ -68,12 +71,14 @@ NewsSummaries/
 │   └── unit/
 │       ├── test_ingest_news.py
 │       ├── test_generate_summaries.py
-│       └── test_generate_audio.py
+│       ├── test_generate_audio.py
+│       └── test_episodes_api.py
 └── docs/
     ├── ARCHITECTURE.md
     ├── DEPLOYMENT.md
-    ├── COST_ESTIMATION.md
-    └── DEVELOPMENT.md              # This file
+    ├── DEVELOPMENT.md              # This file
+    ├── LAMBDA_INTERNALS.md         # Deep-dive on all four Lambda handlers
+    └── COST_ESTIMATION.md
 ```
 
 ---
@@ -239,16 +244,27 @@ Then `make deploy-dev` to update the Lambda environment variable.
 
 | Variable | Lambda | Description |
 |---|---|---|
-| `S3_BUCKET` | all | S3 bucket name |
-| `DYNAMODB_TABLE` | all | DynamoDB table name |
+| `S3_BUCKET_NAME` | all | S3 bucket name |
+| `DYNAMODB_TABLE_NAME` | all | DynamoDB table name |
 | `CLOUDFRONT_DOMAIN` | all | CloudFront domain for audio URLs |
 | `LOG_LEVEL` | all | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
 | `STAGE` | all | `dev` or `prod` |
 | `OPENAI_API_KEY` | summaries, audio | OpenAI API key |
 | `NEWS_API_KEY` | ingest | NewsAPI.org key (`DISABLED` to skip) |
 | `RSS_FEEDS` | ingest | Comma-separated RSS feed URLs |
+| `GENERATE_SUMMARIES_FUNCTION` | ingest | Lambda function name/ARN for fan-out |
 | `TTS_VOICE` | audio | OpenAI TTS voice (nova, alloy, echo…) |
 | `PODCAST_TITLE` | audio | Podcast show title in RSS feed |
 | `PODCAST_DESCRIPTION` | audio | Podcast show description |
 | `PODCAST_AUTHOR` | audio | Author name in RSS feed |
 | `PODCAST_EMAIL` | audio | Author email in RSS feed |
+| `ADMIN_API_KEY` | episodes_api | Bearer token for the Episodes API (empty = auth disabled) |
+| `PRESIGNED_URL_EXPIRY_SECONDS` | episodes_api | Lifetime of presigned S3 URLs in seconds (default 3600) |
+
+---
+
+## Lambda Handler Internals
+
+For a detailed educational walkthrough of every handler — cold starts, event
+shapes, retry patterns, DynamoDB Streams deserialisation, and more — see
+[docs/LAMBDA_INTERNALS.md](LAMBDA_INTERNALS.md).
