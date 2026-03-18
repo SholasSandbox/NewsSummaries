@@ -24,7 +24,6 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime, timezone
 from typing import Any
 
 import boto3
@@ -35,14 +34,17 @@ from botocore.exceptions import ClientError
 # Structured logger
 # ---------------------------------------------------------------------------
 
+
 def _build_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
     if not logger.handlers:
         handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter(
-            '{"time": "%(asctime)s", "level": "%(levelname)s", '
-            '"logger": "%(name)s", "message": %(message)s}'
-        ))
+        handler.setFormatter(
+            logging.Formatter(
+                '{"time": "%(asctime)s", "level": "%(levelname)s", '
+                '"logger": "%(name)s", "message": %(message)s}'
+            )
+        )
         logger.addHandler(handler)
     logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
     return logger
@@ -74,6 +76,7 @@ s3_client = boto3.client("s3")
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def lambda_handler(event: dict, context: Any) -> dict:
     """
     API Gateway HTTP API v2 payload format handler.
@@ -81,11 +84,15 @@ def lambda_handler(event: dict, context: Any) -> dict:
     Routes requests based on the HTTP method and path, enforces simple
     API-key authentication, and returns JSON responses.
     """
-    log.info(json.dumps({
-        "event": "request",
-        "method": event.get("requestContext", {}).get("http", {}).get("method"),
-        "path": event.get("rawPath"),
-    }))
+    log.info(
+        json.dumps(
+            {
+                "event": "request",
+                "method": event.get("requestContext", {}).get("http", {}).get("method"),
+                "path": event.get("rawPath"),
+            }
+        )
+    )
 
     # ── Auth ──────────────────────────────────────────────────────────────────
     if ADMIN_API_KEY:
@@ -130,6 +137,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
 # Handlers
 # ---------------------------------------------------------------------------
 
+
 def _list_episodes(query_params: dict) -> dict:
     """
     Return a paginated list of episodes, newest first.
@@ -162,11 +170,14 @@ def _list_episodes(query_params: dict) -> dict:
         episodes.sort(key=lambda x: x.get("created_at", ""), reverse=True)
 
     log.info(json.dumps({"event": "episodes_listed", "count": len(episodes)}))
-    return _response(200, {
-        "episodes": [_serialise_episode(ep) for ep in episodes],
-        "count": len(episodes),
-        "date_filter": date_filter,
-    })
+    return _response(
+        200,
+        {
+            "episodes": [_serialise_episode(ep) for ep in episodes],
+            "count": len(episodes),
+            "date_filter": date_filter,
+        },
+    )
 
 
 def _get_episode(episode_id: str) -> dict:
@@ -206,11 +217,14 @@ def _get_audio_url(episode_id: str) -> dict:
     episode = items[0]
     audio_key = episode.get("audio_s3_key")
     if not audio_key:
-        return _response(404, {
-            "error": "Audio not yet generated for this episode",
-            "episode_id": episode_id,
-            "status": episode.get("status", "unknown"),
-        })
+        return _response(
+            404,
+            {
+                "error": "Audio not yet generated for this episode",
+                "episode_id": episode_id,
+                "status": episode.get("status", "unknown"),
+            },
+        )
 
     presigned_url = s3_client.generate_presigned_url(
         "get_object",
@@ -218,11 +232,14 @@ def _get_audio_url(episode_id: str) -> dict:
         ExpiresIn=PRESIGNED_URL_EXPIRY,
     )
     log.info(json.dumps({"event": "audio_url_generated", "episode_id": episode_id}))
-    return _response(200, {
-        "episode_id": episode_id,
-        "audio_url": presigned_url,
-        "expires_in_seconds": PRESIGNED_URL_EXPIRY,
-    })
+    return _response(
+        200,
+        {
+            "episode_id": episode_id,
+            "audio_url": presigned_url,
+            "expires_in_seconds": PRESIGNED_URL_EXPIRY,
+        },
+    )
 
 
 def _get_transcript_url(episode_id: str) -> dict:
@@ -243,41 +260,53 @@ def _get_transcript_url(episode_id: str) -> dict:
     episode = items[0]
     summary_key = episode.get("summary_s3_key")
     if not summary_key:
-        return _response(404, {
-            "error": "Transcript not yet generated for this episode",
-            "episode_id": episode_id,
-            "status": episode.get("status", "unknown"),
-        })
+        return _response(
+            404,
+            {
+                "error": "Transcript not yet generated for this episode",
+                "episode_id": episode_id,
+                "status": episode.get("status", "unknown"),
+            },
+        )
 
     presigned_url = s3_client.generate_presigned_url(
         "get_object",
         Params={"Bucket": S3_BUCKET, "Key": summary_key},
         ExpiresIn=PRESIGNED_URL_EXPIRY,
     )
-    log.info(json.dumps({"event": "transcript_url_generated", "episode_id": episode_id}))
-    return _response(200, {
-        "episode_id": episode_id,
-        "transcript_url": presigned_url,
-        "expires_in_seconds": PRESIGNED_URL_EXPIRY,
-    })
+    log.info(
+        json.dumps({"event": "transcript_url_generated", "episode_id": episode_id})
+    )
+    return _response(
+        200,
+        {
+            "episode_id": episode_id,
+            "transcript_url": presigned_url,
+            "expires_in_seconds": PRESIGNED_URL_EXPIRY,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _serialise_episode(episode: dict) -> dict:
     """Return a clean JSON-serialisable episode dict (strip DynamoDB Decimal types)."""
     import decimal
+
     result = {}
     for key, value in episode.items():
         if isinstance(value, decimal.Decimal):
             result[key] = int(value) if value % 1 == 0 else float(value)
         elif isinstance(value, list):
             result[key] = [
-                int(v) if isinstance(v, decimal.Decimal) and v % 1 == 0
-                else float(v) if isinstance(v, decimal.Decimal)
-                else v
+                (
+                    int(v)
+                    if isinstance(v, decimal.Decimal) and v % 1 == 0
+                    else float(v) if isinstance(v, decimal.Decimal) else v
+                )
                 for v in value
             ]
         else:

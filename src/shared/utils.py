@@ -21,7 +21,6 @@ from typing import Any, Callable, TypeVar
 from xml.etree import ElementTree as ET
 
 import boto3
-from botocore.exceptions import ClientError
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -49,13 +48,16 @@ def get_logger(name: str) -> logging.Logger:
         return _LOGGERS[name]
 
     import os
+
     logger = logging.getLogger(name)
     if not logger.handlers:
         handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter(
-            '{"time": "%(asctime)s", "level": "%(levelname)s", '
-            '"logger": "%(name)s", "message": %(message)s}'
-        ))
+        handler.setFormatter(
+            logging.Formatter(
+                '{"time": "%(asctime)s", "level": "%(levelname)s", '
+                '"logger": "%(name)s", "message": %(message)s}'
+            )
+        )
         logger.addHandler(handler)
     logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
     _LOGGERS[name] = logger
@@ -112,6 +114,7 @@ def clear_secret_cache() -> None:
 # Exponential backoff decorator
 # ---------------------------------------------------------------------------
 
+
 def retry_with_backoff(
     max_retries: int = 3,
     base_delay: float = 2.0,
@@ -134,6 +137,7 @@ def retry_with_backoff(
         def call_openai(prompt: str) -> str:
             ...
     """
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -145,22 +149,29 @@ def retry_with_backoff(
                     if attempt >= max_retries:
                         raise
                     wait = base_delay ** (attempt + 1)
-                    logger.warning(json.dumps({
-                        "event": "retry",
-                        "function": func.__name__,
-                        "attempt": attempt + 1,
-                        "max_retries": max_retries,
-                        "wait_seconds": wait,
-                        "error": str(exc),
-                    }))
+                    logger.warning(
+                        json.dumps(
+                            {
+                                "event": "retry",
+                                "function": func.__name__,
+                                "attempt": attempt + 1,
+                                "max_retries": max_retries,
+                                "wait_seconds": wait,
+                                "error": str(exc),
+                            }
+                        )
+                    )
                     time.sleep(wait)
+
         return wrapper  # type: ignore[return-value]
+
     return decorator
 
 
 # ---------------------------------------------------------------------------
 # Episode ID
 # ---------------------------------------------------------------------------
+
 
 def generate_episode_id() -> str:
     """
@@ -175,6 +186,7 @@ def generate_episode_id() -> str:
 # ---------------------------------------------------------------------------
 # RSS Feed Formatting
 # ---------------------------------------------------------------------------
+
 
 def format_rss_feed(
     episodes: list[dict],
@@ -209,11 +221,14 @@ def format_rss_feed(
     ET.register_namespace("itunes", "http://www.itunes.com/dtds/podcast-1.0.dtd")
     ET.register_namespace("content", "http://purl.org/rss/1.0/modules/content/")
 
-    rss = ET.Element("rss", {
-        "version": "2.0",
-        "xmlns:itunes": "http://www.itunes.com/dtds/podcast-1.0.dtd",
-        "xmlns:content": "http://purl.org/rss/1.0/modules/content/",
-    })
+    rss = ET.Element(
+        "rss",
+        {
+            "version": "2.0",
+            "xmlns:itunes": "http://www.itunes.com/dtds/podcast-1.0.dtd",
+            "xmlns:content": "http://purl.org/rss/1.0/modules/content/",
+        },
+    )
     channel = ET.SubElement(rss, "channel")
 
     def _txt(parent: ET.Element, tag: str, text: str, **attrib: str) -> ET.Element:
@@ -247,15 +262,24 @@ def format_rss_feed(
 
         _txt(item, "title", ep.get("title", "News Summary"))
         _txt(item, "description", ep.get("summary", ""))
-        _txt(item, "guid", ep.get("episode_id", generate_episode_id()), isPermaLink="false")
+        _txt(
+            item,
+            "guid",
+            ep.get("episode_id", generate_episode_id()),
+            isPermaLink="false",
+        )
         _txt(item, "pubDate", format_datetime(pub_dt))
         _txt(item, "itunes:summary", ep.get("summary", ""))
         _txt(item, "itunes:episodeType", "full")
-        ET.SubElement(item, "enclosure", {
-            "url": ep.get("audio_url", ""),
-            "type": "audio/mpeg",
-            "length": str(ep.get("audio_size_bytes", 0)),
-        })
+        ET.SubElement(
+            item,
+            "enclosure",
+            {
+                "url": ep.get("audio_url", ""),
+                "type": "audio/mpeg",
+                "length": str(ep.get("audio_size_bytes", 0)),
+            },
+        )
 
     tree = ET.ElementTree(rss)
     buf = io.BytesIO()

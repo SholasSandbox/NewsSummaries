@@ -9,31 +9,32 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
+import sys
 import time
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 import boto3
 import feedparser
 import requests
 
+
 # ---------------------------------------------------------------------------
 # Inline logger (shared layer may not be available during cold-start bootstrap)
 # ---------------------------------------------------------------------------
-import logging
-import sys
-
-
 def _build_logger(name: str) -> logging.Logger:
     """Return a JSON-structured logger."""
     logger = logging.getLogger(name)
     if not logger.handlers:
         handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter(
-            '{"time": "%(asctime)s", "level": "%(levelname)s", '
-            '"logger": "%(name)s", "message": %(message)s}'
-        ))
+        handler.setFormatter(
+            logging.Formatter(
+                '{"time": "%(asctime)s", "level": "%(levelname)s", '
+                '"logger": "%(name)s", "message": %(message)s}'
+            )
+        )
         logger.addHandler(handler)
     logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
     return logger
@@ -45,21 +46,62 @@ log = _build_logger(__name__)
 # Configuration
 # ---------------------------------------------------------------------------
 S3_BUCKET = os.environ["S3_BUCKET_NAME"]
+DYNAMODB_TABLE = os.environ.get("DYNAMODB_TABLE_NAME", "")
 GENERATE_SUMMARIES_FUNCTION = os.environ.get("GENERATE_SUMMARIES_FUNCTION", "")
 NEWS_API_KEY = os.environ.get("NEWS_API_KEY", "")
 NEWS_API_ENABLED = bool(NEWS_API_KEY and NEWS_API_KEY != "DISABLED")
 
 RSS_FEEDS: list[dict[str, str]] = [
-    {"name": "BBC Top Stories", "url": "http://feeds.bbci.co.uk/news/rss.xml", "category": "general"},
-    {"name": "BBC World", "url": "http://feeds.bbci.co.uk/news/world/rss.xml", "category": "world"},
-    {"name": "Reuters Top News", "url": "https://feeds.reuters.com/reuters/topNews", "category": "general"},
-    {"name": "Reuters Business", "url": "https://feeds.reuters.com/reuters/businessNews", "category": "business"},
-    {"name": "Reuters Technology", "url": "https://feeds.reuters.com/reuters/technologyNews", "category": "technology"},
-    {"name": "Reuters Science", "url": "https://feeds.reuters.com/reuters/scienceNews", "category": "science"},
-    {"name": "Associated Press", "url": "https://feeds.apnews.com/rss/apf-topnews", "category": "general"},
-    {"name": "NPR News", "url": "https://feeds.npr.org/1001/rss.xml", "category": "general"},
-    {"name": "The Guardian World", "url": "https://www.theguardian.com/world/rss", "category": "world"},
-    {"name": "Ars Technica", "url": "https://feeds.arstechnica.com/arstechnica/index", "category": "technology"},
+    {
+        "name": "BBC Top Stories",
+        "url": "http://feeds.bbci.co.uk/news/rss.xml",
+        "category": "general",
+    },
+    {
+        "name": "BBC World",
+        "url": "http://feeds.bbci.co.uk/news/world/rss.xml",
+        "category": "world",
+    },
+    {
+        "name": "Reuters Top News",
+        "url": "https://feeds.reuters.com/reuters/topNews",
+        "category": "general",
+    },
+    {
+        "name": "Reuters Business",
+        "url": "https://feeds.reuters.com/reuters/businessNews",
+        "category": "business",
+    },
+    {
+        "name": "Reuters Technology",
+        "url": "https://feeds.reuters.com/reuters/technologyNews",
+        "category": "technology",
+    },
+    {
+        "name": "Reuters Science",
+        "url": "https://feeds.reuters.com/reuters/scienceNews",
+        "category": "science",
+    },
+    {
+        "name": "Associated Press",
+        "url": "https://feeds.apnews.com/rss/apf-topnews",
+        "category": "general",
+    },
+    {
+        "name": "NPR News",
+        "url": "https://feeds.npr.org/1001/rss.xml",
+        "category": "general",
+    },
+    {
+        "name": "The Guardian World",
+        "url": "https://www.theguardian.com/world/rss",
+        "category": "world",
+    },
+    {
+        "name": "Ars Technica",
+        "url": "https://feeds.arstechnica.com/arstechnica/index",
+        "category": "technology",
+    },
 ]
 
 NEWSAPI_CATEGORIES = ["general", "business", "technology", "science", "health"]
@@ -85,30 +127,46 @@ def lambda_handler(event: dict, context: Any) -> dict:
     if NEWS_API_ENABLED:
         newsapi_articles = _fetch_newsapi_articles()
         articles.extend(newsapi_articles)
-        log.info(json.dumps({"event": "newsapi_fetched", "count": len(newsapi_articles)}))
+        log.info(
+            json.dumps({"event": "newsapi_fetched", "count": len(newsapi_articles)})
+        )
 
     unique_articles = _deduplicate(articles)
-    log.info(json.dumps({"event": "dedup_complete", "total": len(articles), "unique": len(unique_articles)}))
+    log.info(
+        json.dumps(
+            {
+                "event": "dedup_complete",
+                "total": len(articles),
+                "unique": len(unique_articles),
+            }
+        )
+    )
 
     stored_keys = _store_articles(unique_articles, run_date)
     log.info(json.dumps({"event": "articles_stored", "count": len(stored_keys)}))
+
+    if stored_keys and DYNAMODB_TABLE:
+        _update_article_metadata(unique_articles, run_date)
 
     if stored_keys and GENERATE_SUMMARIES_FUNCTION:
         _invoke_generate_summaries(stored_keys)
 
     return {
         "statusCode": 200,
-        "body": json.dumps({
-            "run_date": run_date,
-            "articles_fetched": len(articles),
-            "articles_stored": len(stored_keys),
-        }),
+        "body": json.dumps(
+            {
+                "run_date": run_date,
+                "articles_fetched": len(articles),
+                "articles_stored": len(stored_keys),
+            }
+        ),
     }
 
 
 # ---------------------------------------------------------------------------
 # RSS Helpers
 # ---------------------------------------------------------------------------
+
 
 def _fetch_all_rss_articles() -> list[dict]:
     """Fetch and normalise articles from all configured RSS feeds."""
@@ -117,24 +175,36 @@ def _fetch_all_rss_articles() -> list[dict]:
         try:
             feed_articles = _fetch_rss_feed(feed_cfg)
             all_articles.extend(feed_articles)
-            log.info(json.dumps({
-                "event": "rss_feed_fetched",
-                "feed": feed_cfg["name"],
-                "count": len(feed_articles),
-            }))
+            log.info(
+                json.dumps(
+                    {
+                        "event": "rss_feed_fetched",
+                        "feed": feed_cfg["name"],
+                        "count": len(feed_articles),
+                    }
+                )
+            )
         except Exception as exc:  # noqa: BLE001
-            log.warning(json.dumps({
-                "event": "rss_feed_error",
-                "feed": feed_cfg["name"],
-                "error": str(exc),
-            }))
+            log.warning(
+                json.dumps(
+                    {
+                        "event": "rss_feed_error",
+                        "feed": feed_cfg["name"],
+                        "error": str(exc),
+                    }
+                )
+            )
     return all_articles
 
 
 def _fetch_rss_feed(feed_cfg: dict) -> list[dict]:
     """Download and parse a single RSS feed, returning normalised article dicts."""
     # Use requests so we control timeout; feedparser can parse the response text.
-    response = requests.get(feed_cfg["url"], timeout=HTTP_TIMEOUT, headers={"User-Agent": "NewsSummaries/1.0"})
+    response = requests.get(
+        feed_cfg["url"],
+        timeout=HTTP_TIMEOUT,
+        headers={"User-Agent": "NewsSummaries/1.0"},
+    )
     response.raise_for_status()
     parsed = feedparser.parse(response.text)
 
@@ -146,14 +216,16 @@ def _fetch_rss_feed(feed_cfg: dict) -> list[dict]:
         published = _parse_published(entry)
         if not title or not link:
             continue
-        articles.append({
-            "source": feed_cfg["name"],
-            "category": feed_cfg["category"],
-            "title": title,
-            "url": link,
-            "raw_summary": summary,
-            "published_at": published,
-        })
+        articles.append(
+            {
+                "source": feed_cfg["name"],
+                "category": feed_cfg["category"],
+                "title": title,
+                "url": link,
+                "raw_summary": summary,
+                "published_at": published,
+            }
+        )
     return articles
 
 
@@ -161,7 +233,9 @@ def _parse_published(entry: Any) -> str:
     """Extract a normalised ISO-8601 publication timestamp from a feedparser entry."""
     try:
         if hasattr(entry, "published_parsed") and entry.published_parsed:
-            return datetime(*entry.published_parsed[:6], tzinfo=timezone.utc).isoformat()
+            return datetime(
+                *entry.published_parsed[:6], tzinfo=timezone.utc
+            ).isoformat()
         if hasattr(entry, "updated_parsed") and entry.updated_parsed:
             return datetime(*entry.updated_parsed[:6], tzinfo=timezone.utc).isoformat()
     except Exception:  # noqa: BLE001
@@ -173,6 +247,7 @@ def _parse_published(entry: Any) -> str:
 # NewsAPI Helpers
 # ---------------------------------------------------------------------------
 
+
 def _fetch_newsapi_articles() -> list[dict]:
     """Fetch top headlines from NewsAPI for all configured categories."""
     articles: list[dict] = []
@@ -181,11 +256,15 @@ def _fetch_newsapi_articles() -> list[dict]:
             category_articles = _fetch_newsapi_category(category)
             articles.extend(category_articles)
         except Exception as exc:  # noqa: BLE001
-            log.warning(json.dumps({
-                "event": "newsapi_category_error",
-                "category": category,
-                "error": str(exc),
-            }))
+            log.warning(
+                json.dumps(
+                    {
+                        "event": "newsapi_category_error",
+                        "category": category,
+                        "error": str(exc),
+                    }
+                )
+            )
     return articles
 
 
@@ -207,20 +286,25 @@ def _fetch_newsapi_category(category: str) -> list[dict]:
         url = (item.get("url") or "").strip()
         if not title or not url or title == "[Removed]":
             continue
-        articles.append({
-            "source": item.get("source", {}).get("name", "NewsAPI"),
-            "category": category,
-            "title": title,
-            "url": url,
-            "raw_summary": (item.get("description") or "").strip(),
-            "published_at": item.get("publishedAt", datetime.now(timezone.utc).isoformat()),
-        })
+        articles.append(
+            {
+                "source": item.get("source", {}).get("name", "NewsAPI"),
+                "category": category,
+                "title": title,
+                "url": url,
+                "raw_summary": (item.get("description") or "").strip(),
+                "published_at": item.get(
+                    "publishedAt", datetime.now(timezone.utc).isoformat()
+                ),
+            }
+        )
     return articles
 
 
 # ---------------------------------------------------------------------------
 # Deduplication
 # ---------------------------------------------------------------------------
+
 
 def _article_hash(article: dict) -> str:
     """Create a stable SHA-256 hash for an article based on its URL and title."""
@@ -245,6 +329,7 @@ def _deduplicate(articles: list[dict]) -> list[dict]:
 # S3 Storage
 # ---------------------------------------------------------------------------
 
+
 def _store_articles(articles: list[dict], run_date: str) -> list[str]:
     """
     Store each article as a JSON object in S3.
@@ -266,7 +351,9 @@ def _store_articles(articles: list[dict], run_date: str) -> list[str]:
             # Skip if already stored (idempotent)
             try:
                 s3.head_object(Bucket=S3_BUCKET, Key=s3_key)
-                log.debug(json.dumps({"event": "article_already_exists", "key": s3_key}))
+                log.debug(
+                    json.dumps({"event": "article_already_exists", "key": s3_key})
+                )
                 continue
             except s3.exceptions.ClientError:
                 pass  # Object does not exist – proceed to write
@@ -283,17 +370,77 @@ def _store_articles(articles: list[dict], run_date: str) -> list[str]:
             )
             stored_keys.append(s3_key)
         except Exception as exc:  # noqa: BLE001
-            log.error(json.dumps({
-                "event": "s3_write_error",
-                "key": s3_key,
-                "error": str(exc),
-            }))
+            log.error(
+                json.dumps(
+                    {
+                        "event": "s3_write_error",
+                        "key": s3_key,
+                        "error": str(exc),
+                    }
+                )
+            )
     return stored_keys
+
+
+# ---------------------------------------------------------------------------
+# DynamoDB Metadata
+# ---------------------------------------------------------------------------
+
+
+def _update_article_metadata(articles: list[dict], run_date: str) -> None:
+    """
+    Write article ingestion metadata to DynamoDB.
+
+    Creates a record per article with status="ingested" so Lambda 2 can
+    pick up the article and update the record with summary information.
+    TTL is set to 30 days from now for automatic cleanup.
+    """
+    dynamodb = boto3.resource("dynamodb")
+    table = dynamodb.Table(DYNAMODB_TABLE)
+    now = datetime.now(timezone.utc)
+    ttl = int(now.timestamp()) + 30 * 24 * 3600  # 30 days
+
+    for article in articles:
+        article_hash = article.get("article_hash", "")
+        s3_key = f"raw/{run_date}/{article_hash}.json"
+        item = {
+            "episode_id": article_hash,
+            "date": run_date,
+            "title": article.get("title", ""),
+            "source": article.get("source", ""),
+            "url": article.get("url", ""),
+            "category": article.get("category", "general"),
+            "fetch_timestamp": now.isoformat(),
+            "s3_path": s3_key,
+            "status": "ingested",
+            "created_at": now.isoformat(),
+            "ttl": ttl,
+        }
+        try:
+            table.put_item(
+                Item=item, ConditionExpression="attribute_not_exists(episode_id)"
+            )
+            log.debug(json.dumps({"event": "dynamo_written", "hash": article_hash}))
+        except table.meta.client.exceptions.ConditionalCheckFailedException:
+            log.debug(
+                json.dumps({"event": "dynamo_already_exists", "hash": article_hash})
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.error(
+                json.dumps(
+                    {
+                        "event": "dynamo_write_error",
+                        "hash": article_hash,
+                        "error": str(exc),
+                    }
+                )
+            )
 
 
 # ---------------------------------------------------------------------------
 # Downstream invocation
 # ---------------------------------------------------------------------------
+
 
 def _invoke_generate_summaries(s3_keys: list[str]) -> None:
     """
@@ -313,9 +460,13 @@ def _invoke_generate_summaries(s3_keys: list[str]) -> None:
             )
             log.debug(json.dumps({"event": "summaries_invoked", "key": s3_key}))
         except Exception as exc:  # noqa: BLE001
-            log.error(json.dumps({
-                "event": "summaries_invoke_error",
-                "key": s3_key,
-                "error": str(exc),
-            }))
+            log.error(
+                json.dumps(
+                    {
+                        "event": "summaries_invoke_error",
+                        "key": s3_key,
+                        "error": str(exc),
+                    }
+                )
+            )
         time.sleep(0.05)  # gentle rate limiting between Lambda invocations

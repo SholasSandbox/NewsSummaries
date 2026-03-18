@@ -7,7 +7,6 @@ AWS services are mocked with moto; HTTP requests are intercepted with responses.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 from unittest.mock import MagicMock, patch
@@ -50,6 +49,7 @@ SAMPLE_RSS = """<?xml version="1.0" encoding="UTF-8"?>
 # Tests: RSS Parsing
 # ─────────────────────────────────────────────
 
+
 class TestRssFeedParsing:
     """Tests for _fetch_rss_feed and related helpers."""
 
@@ -75,19 +75,20 @@ class TestRssFeedParsing:
         """Should cap at 20 articles per feed to control ingestion volume."""
         from src.ingest_news.handler import _fetch_rss_feed
 
-        items = "\n".join(
-            f"""<item>
+        items = "\n".join(f"""<item>
                 <title>Story {i}</title>
                 <link>https://example.com/story-{i}</link>
                 <description>Description {i}</description>
-            </item>"""
-            for i in range(30)
-        )
+            </item>""" for i in range(30))
         rss_with_30_items = f"<rss version='2.0'><channel>{items}</channel></rss>"
         feed_url = "https://example.com/big-feed.xml"
-        responses_lib.add(responses_lib.GET, feed_url, body=rss_with_30_items, status=200)
+        responses_lib.add(
+            responses_lib.GET, feed_url, body=rss_with_30_items, status=200
+        )
 
-        articles = _fetch_rss_feed({"name": "Big Feed", "url": feed_url, "category": "general"})
+        articles = _fetch_rss_feed(
+            {"name": "Big Feed", "url": feed_url, "category": "general"}
+        )
         assert len(articles) == 20
 
     @responses_lib.activate
@@ -102,7 +103,9 @@ class TestRssFeedParsing:
         feed_url = "https://example.com/partial.xml"
         responses_lib.add(responses_lib.GET, feed_url, body=rss, status=200)
 
-        articles = _fetch_rss_feed({"name": "Test", "url": feed_url, "category": "general"})
+        articles = _fetch_rss_feed(
+            {"name": "Test", "url": feed_url, "category": "general"}
+        )
         assert len(articles) == 1
         assert articles[0]["title"] == "Valid Article"
 
@@ -115,12 +118,15 @@ class TestRssFeedParsing:
         responses_lib.add(responses_lib.GET, feed_url, status=503)
 
         with pytest.raises(Exception):
-            _fetch_rss_feed({"name": "Down Feed", "url": feed_url, "category": "general"})
+            _fetch_rss_feed(
+                {"name": "Down Feed", "url": feed_url, "category": "general"}
+            )
 
 
 # ─────────────────────────────────────────────
 # Tests: Deduplication
 # ─────────────────────────────────────────────
+
 
 class TestDeduplication:
     """Tests for the _deduplicate helper."""
@@ -179,6 +185,7 @@ class TestDeduplication:
 # Tests: S3 Storage
 # ─────────────────────────────────────────────
 
+
 class TestS3Storage:
     """Tests for the _store_articles helper."""
 
@@ -190,15 +197,17 @@ class TestS3Storage:
         s3 = boto3.client("s3", region_name="us-east-1")
         s3.create_bucket(Bucket="test-news-summaries")
 
-        articles = [{
-            "article_hash": "abc123def456aa",
-            "source": "BBC",
-            "category": "general",
-            "title": "Test Article",
-            "url": "https://example.com/test",
-            "raw_summary": "A test article.",
-            "published_at": "2024-01-15T10:00:00+00:00",
-        }]
+        articles = [
+            {
+                "article_hash": "abc123def456aa",
+                "source": "BBC",
+                "category": "general",
+                "title": "Test Article",
+                "url": "https://example.com/test",
+                "raw_summary": "A test article.",
+                "published_at": "2024-01-15T10:00:00+00:00",
+            }
+        ]
 
         keys = _store_articles(articles, "2024-01-15")
         assert len(keys) == 1
@@ -227,11 +236,13 @@ class TestS3Storage:
             Body=json.dumps({"title": "Already stored"}),
         )
 
-        articles = [{
-            "article_hash": article_hash,
-            "title": "Test Article",
-            "url": "https://example.com/test",
-        }]
+        articles = [
+            {
+                "article_hash": article_hash,
+                "title": "Test Article",
+                "url": "https://example.com/test",
+            }
+        ]
 
         keys = _store_articles(articles, "2024-01-15")
         assert len(keys) == 0  # Nothing new was stored
@@ -245,7 +256,11 @@ class TestS3Storage:
         s3.create_bucket(Bucket="test-news-summaries")
 
         articles = [
-            {"article_hash": f"hash{i:014d}", "title": f"Article {i}", "url": f"https://example.com/{i}"}
+            {
+                "article_hash": f"hash{i:014d}",
+                "title": f"Article {i}",
+                "url": f"https://example.com/{i}",
+            }
             for i in range(5)
         ]
         keys = _store_articles(articles, "2024-01-15")
@@ -255,6 +270,7 @@ class TestS3Storage:
 # ─────────────────────────────────────────────
 # Tests: Lambda handler
 # ─────────────────────────────────────────────
+
 
 class TestLambdaHandler:
     """Integration-style tests for the IngestNews lambda_handler."""
@@ -267,7 +283,9 @@ class TestLambdaHandler:
         from src.ingest_news import handler as h
 
         for feed_cfg in h.RSS_FEEDS:
-            responses_lib.add(responses_lib.GET, feed_cfg["url"], body=SAMPLE_RSS, status=200)
+            responses_lib.add(
+                responses_lib.GET, feed_cfg["url"], body=SAMPLE_RSS, status=200
+            )
 
         s3 = boto3.client("s3", region_name="us-east-1")
         s3.create_bucket(Bucket="test-news-summaries")
@@ -290,7 +308,9 @@ class TestLambdaHandler:
         # First feed fails, rest succeed
         responses_lib.add(responses_lib.GET, h.RSS_FEEDS[0]["url"], status=503)
         for feed_cfg in h.RSS_FEEDS[1:]:
-            responses_lib.add(responses_lib.GET, feed_cfg["url"], body=SAMPLE_RSS, status=200)
+            responses_lib.add(
+                responses_lib.GET, feed_cfg["url"], body=SAMPLE_RSS, status=200
+            )
 
         s3 = boto3.client("s3", region_name="us-east-1")
         s3.create_bucket(Bucket="test-news-summaries")
@@ -300,3 +320,97 @@ class TestLambdaHandler:
 
         # Should still succeed despite one feed failure
         assert result["statusCode"] == 200
+
+
+# ─────────────────────────────────────────────
+# Tests: DynamoDB Metadata
+# ─────────────────────────────────────────────
+
+
+class TestDynamoDBMetadata:
+    """Tests for the _update_article_metadata helper."""
+
+    @mock_aws
+    def test_writes_article_metadata_to_dynamodb(self) -> None:
+        """Should create a DynamoDB record with status='ingested' for each article."""
+        from src.ingest_news.handler import _update_article_metadata
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        dynamodb.create_table(
+            TableName="test-news-summaries-episodes",
+            BillingMode="PAY_PER_REQUEST",
+            AttributeDefinitions=[
+                {"AttributeName": "episode_id", "AttributeType": "S"},
+                {"AttributeName": "date", "AttributeType": "S"},
+            ],
+            KeySchema=[
+                {"AttributeName": "episode_id", "KeyType": "HASH"},
+                {"AttributeName": "date", "KeyType": "RANGE"},
+            ],
+        )
+
+        articles = [
+            {
+                "article_hash": "abc123def456ee",
+                "title": "Test Article",
+                "source": "BBC",
+                "url": "https://example.com/test",
+                "category": "general",
+            }
+        ]
+        _update_article_metadata(articles, "2024-01-15")
+
+        table = dynamodb.Table("test-news-summaries-episodes")
+        result = table.get_item(
+            Key={"episode_id": "abc123def456ee", "date": "2024-01-15"}
+        )
+        item = result["Item"]
+        assert item["status"] == "ingested"
+        assert item["title"] == "Test Article"
+        assert item["source"] == "BBC"
+        assert item["s3_path"] == "raw/2024-01-15/abc123def456ee.json"
+        assert "ttl" in item
+
+    @mock_aws
+    def test_skips_duplicate_dynamodb_records(self) -> None:
+        """Should not overwrite an existing DynamoDB record (idempotent)."""
+        from src.ingest_news.handler import _update_article_metadata
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        table = dynamodb.create_table(
+            TableName="test-news-summaries-episodes",
+            BillingMode="PAY_PER_REQUEST",
+            AttributeDefinitions=[
+                {"AttributeName": "episode_id", "AttributeType": "S"},
+                {"AttributeName": "date", "AttributeType": "S"},
+            ],
+            KeySchema=[
+                {"AttributeName": "episode_id", "KeyType": "HASH"},
+                {"AttributeName": "date", "KeyType": "RANGE"},
+            ],
+        )
+        # Pre-populate the record with a different status
+        table.put_item(
+            Item={
+                "episode_id": "abc123def456ff",
+                "date": "2024-01-15",
+                "status": "summarized",
+            }
+        )
+
+        articles = [
+            {
+                "article_hash": "abc123def456ff",
+                "title": "Test Article",
+                "source": "BBC",
+                "url": "https://example.com/test",
+                "category": "general",
+            }
+        ]
+        # Should not raise and should not overwrite the existing record
+        _update_article_metadata(articles, "2024-01-15")
+
+        result = table.get_item(
+            Key={"episode_id": "abc123def456ff", "date": "2024-01-15"}
+        )
+        assert result["Item"]["status"] == "summarized"  # original value preserved

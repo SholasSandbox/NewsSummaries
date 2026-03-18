@@ -152,8 +152,8 @@ def sample_summary_doc() -> dict:
         "raw_s3_key": "raw/2024-01-15/abc123def456.json",
         "summary_s3_key": "summaries/2024-01-15/abc123def456.json",
         "summary": "Scientists have announced a major AI breakthrough that could accelerate drug discovery. "
-                   "The new model outperformed human experts on complex protein folding tasks. "
-                   "Researchers believe this could cut development timelines by decades.",
+        "The new model outperformed human experts on complex protein folding tasks. "
+        "Researchers believe this could cut development timelines by decades.",
         "category": "technology",
         "importance": "high",
         "keywords": ["AI", "science", "breakthrough", "drug discovery"],
@@ -161,9 +161,10 @@ def sample_summary_doc() -> dict:
 
 
 @pytest.fixture
-def s3_with_raw_article(mock_s3: boto3.client, sample_raw_article: dict) -> boto3.client:
+def s3_with_raw_article(
+    mock_s3: boto3.client, sample_raw_article: dict
+) -> boto3.client:
     """S3 fixture with a raw article already uploaded."""
-    import json
     mock_s3.put_object(
         Bucket=TEST_BUCKET,
         Key=f"raw/{sample_raw_article['run_date']}/{sample_raw_article['article_hash']}.json",
@@ -176,7 +177,6 @@ def s3_with_raw_article(mock_s3: boto3.client, sample_raw_article: dict) -> boto
 @pytest.fixture
 def s3_with_summary(mock_s3: boto3.client, sample_summary_doc: dict) -> boto3.client:
     """S3 fixture with a summary document already uploaded."""
-    import json
     mock_s3.put_object(
         Bucket=TEST_BUCKET,
         Key=sample_summary_doc["summary_s3_key"],
