@@ -1,0 +1,49 @@
+version = 0.1
+
+# ─────────────────────────────────────────────
+# Global SAM build settings
+# ─────────────────────────────────────────────
+[default.build.parameters]
+use_container = true
+
+# ─────────────────────────────────────────────
+# Development environment
+# ─────────────────────────────────────────────
+[dev.deploy.parameters]
+stack_name          = "news-summaries-dev"
+s3_prefix           = "news-summaries-dev"
+region              = "us-east-1"
+confirm_changeset   = false
+capabilities        = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
+fail_on_empty_changeset = false
+parameter_overrides = [
+    "Stage=dev",
+    "AlertEmail=alerts@example.com",
+    "PodcastTitle=News Summaries (Dev)",
+    "PodcastDescription=Daily AI-powered news summaries - dev environment",
+    "PodcastAuthor=News Bot",
+    "PodcastEmail=podcast@example.com",
+]
+# Set s3_bucket to your SAM artifacts bucket, e.g.:
+# s3_bucket = "news-summaries-sam-artifacts-123456789012"
+
+# ─────────────────────────────────────────────
+# Production environment
+# ─────────────────────────────────────────────
+[prod.deploy.parameters]
+stack_name          = "news-summaries-prod"
+s3_prefix           = "news-summaries-prod"
+region              = "us-east-1"
+confirm_changeset   = true
+capabilities        = "CAPABILITY_IAM CAPABILITY_NAMED_IAM CAPABILITY_AUTO_EXPAND"
+fail_on_empty_changeset = false
+parameter_overrides = [
+    "Stage=prod",
+    "AlertEmail=alerts@example.com",
+    "PodcastTitle=News Summaries",
+    "PodcastDescription=Daily AI-powered news summaries",
+    "PodcastAuthor=News Bot",
+    "PodcastEmail=podcast@example.com",
+]
+# Set s3_bucket to your SAM artifacts bucket, e.g.:
+# s3_bucket = "news-summaries-sam-artifacts-123456789012"

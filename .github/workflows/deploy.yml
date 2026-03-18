@@ -1,0 +1,288 @@
+name: Deploy NewsSummaries
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        default: "dev"
+        type: choice
+        options: [dev, prod]
+
+permissions:
+  id-token: write   # Required for OIDC credential exchange
+  contents: read
+  checks: write     # Required for test result reporting
+
+env:
+  AWS_REGION: us-east-1
+  PYTHON_VERSION: "3.11"
+  SAM_CLI_VERSION: "1.110.0"
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Lint
+  # ─────────────────────────────────────────────
+  lint:
+    name: Lint & Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-lint-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-lint-
+
+      - name: Install lint tools
+        run: pip install flake8 black isort
+
+      - name: Run flake8
+        run: flake8 src/ tests/ --max-line-length 120 --extend-ignore=E203,W503
+
+      - name: Check black formatting
+        run: black --check src/ tests/
+
+      - name: Check isort import ordering
+        run: isort --check-only src/ tests/
+
+  # ─────────────────────────────────────────────
+  # Unit Tests
+  # ─────────────────────────────────────────────
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-test-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-test-
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install \
+            feedparser==6.0.11 \
+            requests==2.31.0 \
+            openai==1.12.0 \
+            boto3==1.34.0
+          pip install -r tests/requirements.txt
+
+      - name: Run unit tests
+        run: |
+          pytest tests/unit/ \
+            --cov=src \
+            --cov-report=xml:coverage.xml \
+            --cov-report=term-missing \
+            --junitxml=test-results.xml \
+            -v
+        env:
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: testing
+          AWS_SECRET_ACCESS_KEY: testing
+          S3_BUCKET_NAME: test-news-summaries
+          DYNAMODB_TABLE_NAME: test-news-summaries-episodes
+          OPENAI_API_KEY: sk-test-fake
+          NEWS_API_KEY: DISABLED
+          STAGE: test
+          LOG_LEVEL: DEBUG
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: |
+            test-results.xml
+            coverage.xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: github.event_name == 'push'
+        with:
+          file: coverage.xml
+          fail_ci_if_error: false
+
+  # ─────────────────────────────────────────────
+  # SAM Build
+  # ─────────────────────────────────────────────
+  build:
+    name: SAM Build
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Set up AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          version: ${{ env.SAM_CLI_VERSION }}
+          use-installer: true
+
+      - name: Cache SAM build
+        uses: actions/cache@v4
+        with:
+          path: .aws-sam
+          key: ${{ runner.os }}-sam-${{ hashFiles('template.yaml', 'src/**/*.py', 'src/**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-sam-
+
+      - name: SAM build
+        run: sam build --use-container
+
+      - name: Validate SAM template
+        run: sam validate --lint
+
+      - name: Upload SAM build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sam-build
+          path: .aws-sam/build/
+          retention-days: 1
+
+  # ─────────────────────────────────────────────
+  # Deploy to Dev (on push to main only)
+  # ─────────────────────────────────────────────
+  deploy-dev:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: dev
+    concurrency:
+      group: deploy-dev
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          version: ${{ env.SAM_CLI_VERSION }}
+          use-installer: true
+
+      - name: Download SAM build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sam-build
+          path: .aws-sam/build/
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_DEV }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: NewsSummaries-DeployDev-${{ github.run_id }}
+
+      - name: Deploy to dev
+        run: |
+          sam deploy \
+            --config-env dev \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --s3-bucket "${{ secrets.SAM_ARTIFACTS_BUCKET_DEV }}" \
+            --parameter-overrides \
+              "Stage=dev" \
+              "AlertEmail=${{ secrets.ALERT_EMAIL }}" \
+              "PodcastTitle=News Summaries (Dev)" \
+              "PodcastAuthor=News Bot" \
+              "PodcastEmail=${{ secrets.PODCAST_EMAIL }}"
+
+      - name: Output stack outputs
+        run: |
+          aws cloudformation describe-stacks \
+            --stack-name news-summaries-dev \
+            --query 'Stacks[0].Outputs' \
+            --output table
+
+  # ─────────────────────────────────────────────
+  # Deploy to Prod (manual trigger or workflow_dispatch)
+  # ─────────────────────────────────────────────
+  deploy-prod:
+    name: Deploy to Prod
+    runs-on: ubuntu-latest
+    needs: build
+    if: >
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'prod')
+    environment: prod
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          version: ${{ env.SAM_CLI_VERSION }}
+          use-installer: true
+
+      - name: Download SAM build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sam-build
+          path: .aws-sam/build/
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN_PROD }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: NewsSummaries-DeployProd-${{ github.run_id }}
+
+      - name: Deploy to prod
+        run: |
+          sam deploy \
+            --config-env prod \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --s3-bucket "${{ secrets.SAM_ARTIFACTS_BUCKET_PROD }}" \
+            --parameter-overrides \
+              "Stage=prod" \
+              "AlertEmail=${{ secrets.ALERT_EMAIL }}" \
+              "PodcastTitle=News Summaries" \
+              "PodcastAuthor=News Bot" \
+              "PodcastEmail=${{ secrets.PODCAST_EMAIL }}"
+
+      - name: Output stack outputs
+        run: |
+          aws cloudformation describe-stacks \
+            --stack-name news-summaries-prod \
+            --query 'Stacks[0].Outputs' \
+            --output table
+
+      - name: Create GitHub deployment status
+        run: |
+          echo "Production deployment complete for run ${{ github.run_id }}"
