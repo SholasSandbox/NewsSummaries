@@ -105,3 +105,16 @@ variable "cloudfront_price_class" {
   type        = string
   default     = "PriceClass_100"
 }
+
+variable "enable_api_gateway" {
+  description = "Deploy the API Gateway HTTP API fronting Lambda 4 (Episodes API). Set false for dev to save cost."
+  type        = bool
+  default     = false
+}
+
+variable "admin_api_key" {
+  description = "Bearer token for the internal Episodes API. Leave empty to disable auth (not recommended for prod)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}

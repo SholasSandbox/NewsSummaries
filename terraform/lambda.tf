@@ -237,3 +237,72 @@ resource "aws_lambda_event_source_mapping" "dynamodb_to_generate_audio" {
     }
   }
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Lambda 4 — Episodes API (Admin / Observability layer)
+#
+# Queries DynamoDB for episode metadata and generates presigned S3 URLs for
+# MP3 audio and transcript review.  Fronted by an optional API Gateway HTTP API
+# (see api_gateway.tf).  Always deployed so it can be invoked directly even
+# when enable_api_gateway = false.
+# ─────────────────────────────────────────────────────────────────────────────
+
+resource "null_resource" "build_episodes_api" {
+  triggers = {
+    handler      = filemd5("${local.src_root}/episodes_api/handler.py")
+    requirements = filemd5("${local.src_root}/episodes_api/requirements.txt")
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      set -e
+      rm -rf "${local.dist_root}/episodes_api"
+      mkdir -p "${local.dist_root}/episodes_api"
+      cp "${local.src_root}/episodes_api/handler.py" "${local.dist_root}/episodes_api/"
+      pip install \
+        -r "${local.src_root}/episodes_api/requirements.txt" \
+        -t "${local.dist_root}/episodes_api/" \
+        --quiet --upgrade
+    EOT
+  }
+}
+
+data "archive_file" "episodes_api" {
+  depends_on  = [null_resource.build_episodes_api]
+  type        = "zip"
+  source_dir  = "${local.dist_root}/episodes_api"
+  output_path = "${local.dist_root}/episodes_api.zip"
+}
+
+resource "aws_lambda_function" "episodes_api" {
+  function_name    = "${local.prefix}-episodes-api"
+  description      = "Episodes API: queries DynamoDB metadata and returns presigned S3 URLs for admin review"
+  role             = aws_iam_role.episodes_api.arn
+  filename         = data.archive_file.episodes_api.output_path
+  source_code_hash = data.archive_file.episodes_api.output_base64sha256
+  handler          = "handler.lambda_handler"
+  runtime          = "python3.11"
+  architectures    = ["arm64"]
+  memory_size      = 256
+  timeout          = 30
+
+  environment {
+    variables = merge(local.common_lambda_env, {
+      ADMIN_API_KEY                = var.admin_api_key
+      PRESIGNED_URL_EXPIRY_SECONDS = "3600"
+    })
+  }
+
+  dead_letter_config {
+    target_arn = aws_sqs_queue.episodes_api_dlq.arn
+  }
+
+  tracing_config {
+    mode = "Active"
+  }
+
+  depends_on = [
+    aws_iam_role_policy_attachment.episodes_api_basic,
+    aws_cloudwatch_log_group.episodes_api,
+  ]
+}

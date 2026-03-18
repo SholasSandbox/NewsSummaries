@@ -50,6 +50,10 @@ build: ## Install Lambda dependencies into dist/ (required before terraform plan
 	@cp src/generate_audio/handler.py dist/generate_audio/
 	@cp -r src/shared dist/generate_audio/
 	@pip install -r src/generate_audio/requirements.txt -t dist/generate_audio/ --quiet --upgrade
+	@echo "Building EpisodesAPI..."
+	@rm -rf dist/episodes_api && mkdir -p dist/episodes_api
+	@cp src/episodes_api/handler.py dist/episodes_api/
+	@pip install -r src/episodes_api/requirements.txt -t dist/episodes_api/ --quiet --upgrade
 	@echo "Build complete. dist/ is ready."
 
 # ─────────────────────────────────────────────
@@ -161,6 +165,12 @@ logs-summaries: ## Tail CloudWatch logs for GenerateSummaries (dev)
 
 logs-audio: ## Tail CloudWatch logs for GenerateAudio (dev)
 	aws logs tail /aws/lambda/news-summaries-dev-generate-audio \
+		--follow \
+		--format short \
+		--profile $(AWS_PROFILE)
+
+logs-api: ## Tail CloudWatch logs for EpisodesAPI Lambda 4 (dev)
+	aws logs tail /aws/lambda/news-summaries-dev-episodes-api \
 		--follow \
 		--format short \
 		--profile $(AWS_PROFILE)

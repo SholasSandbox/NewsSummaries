@@ -42,3 +42,13 @@ output "error_topic_arn" {
   description = "ARN of the SNS topic for error alerts"
   value       = aws_sns_topic.errors.arn
 }
+
+output "episodes_api_function_arn" {
+  description = "ARN of the Episodes API Lambda function (Lambda 4)"
+  value       = aws_lambda_function.episodes_api.arn
+}
+
+output "episodes_api_url" {
+  description = "API Gateway URL for the Episodes API (empty when enable_api_gateway = false)"
+  value       = var.enable_api_gateway ? aws_apigatewayv2_api.episodes[0].api_endpoint : ""
+}

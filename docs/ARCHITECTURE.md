@@ -8,6 +8,7 @@ NewsSummaries is a fully serverless, event-driven pipeline deployed on AWS that:
 2. **Summarises** each article using OpenAI's `o3-mini` model into a 2–3 sentence structured summary with category and importance tags.
 3. **Converts** each summary to speech using OpenAI's TTS API (`tts-1`, `nova` voice) and stores the audio as an MP3.
 4. **Distributes** audio files via CloudFront and publishes a standard iTunes-compatible RSS/podcast feed.
+5. **Exposes** an internal Episodes API (Lambda 4) for admin review of episode metadata, audio files, and transcripts.
 
 All infrastructure is defined as code using **HashiCorp Terraform** (`terraform/` directory) and can be deployed or torn down in a single command.
 
@@ -18,15 +19,17 @@ All infrastructure is defined as code using **HashiCorp Terraform** (`terraform/
 | Component | AWS Service | Purpose |
 |---|---|---|
 | Scheduler | EventBridge Scheduler | Triggers ingest twice daily (06:00 & 18:00 UTC) |
-| IngestNews | Lambda (Python 3.11, arm64) | Fetches RSS + NewsAPI, deduplicates, writes to S3 |
-| GenerateSummaries | Lambda (Python 3.11, arm64) | OpenAI o3-mini summarisation, writes S3 + DynamoDB |
-| GenerateAudio | Lambda (Python 3.11, arm64) | OpenAI TTS MP3 generation, writes S3 + DynamoDB + RSS |
-| Raw / Summary / Audio Storage | S3 | Object store for all pipeline artefacts |
+| Lambda 1 – IngestNews | Lambda (Python 3.11, arm64) | Fetches RSS + NewsAPI, deduplicates, writes raw articles to S3 |
+| Lambda 2 – GenerateSummaries | Lambda (Python 3.11, arm64) | OpenAI o3-mini summarisation, writes summaries to S3 + DynamoDB |
+| Lambda 3 – GenerateAudio | Lambda (Python 3.11, arm64) | OpenAI TTS MP3 generation, writes audio to S3, updates DynamoDB + RSS |
+| Lambda 4 – EpisodesAPI | Lambda (Python 3.11, arm64) | Internal admin API: query episode metadata, stream presigned audio/transcript URLs |
+| S3 – Raw Articles | S3 | Stores raw ingested news JSON (`raw/`) |
+| S3 – Episodes + Scripts | S3 | Stores AI summaries (`summaries/`) and MP3 audio (`audio/`) |
 | Episode Metadata | DynamoDB (on-demand) | Queryable record per episode with GSIs |
-| Audio Delivery | CloudFront | Low-latency, HTTPS-only audio distribution |
+| Podcast Delivery | CloudFront | Low-latency, HTTPS-only audio and RSS feed distribution |
+| Episodes API Gateway | API Gateway HTTP API (optional) | Public-facing HTTPS endpoint fronting Lambda 4 |
 | Dead Letter Queues | SQS | Captures failed Lambda invocations for inspection |
 | Alerting | SNS → Email | Notifies on error alarm threshold breach |
-| Secrets | SSM Parameter Store | Stores API keys (SecureString, KMS-encrypted) |
 | Observability | CloudWatch Logs + Alarms + Dashboard | Structured JSON logs, error rate alarms, metrics |
 
 ---
@@ -75,6 +78,22 @@ All infrastructure is defined as code using **HashiCorp Terraform** (`terraform/
    │  audio/*.mp3 via   │    │  rss/feed.xml (via CF)    │
    │  HTTPS + OAC       │    │  iTunes / Overcast / etc  │
    └────────────────────┘    └──────────────────────────┘
+
+┌─────────────────────────────────────── Admin / Observability ──────┐
+│                                                                     │
+│  DynamoDB (Episodes Metadata)                                       │
+│       │ Query episodes by date / ID                                 │
+│       ▼                                                             │
+│  Lambda 4: EpisodesAPI                                              │
+│  1. GET /episodes            → list episode metadata                │
+│  2. GET /episodes/{id}       → full episode record                  │
+│  3. GET /episodes/{id}/audio → presigned S3 URL (MP3 review)       │
+│  4. GET /episodes/{id}/transcript → presigned S3 URL (JSON review) │
+│       │ (optional)                                                  │
+│       ▼                                                             │
+│  API Gateway HTTP API  →  Admin Episodes UI (future)               │
+│  (enable_api_gateway = true to activate)                            │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ### S3 Key Structure

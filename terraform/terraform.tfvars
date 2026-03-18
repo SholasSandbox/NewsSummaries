@@ -28,3 +28,5 @@ lambda_memory_audio     = 1024
 lambda_timeout          = 300
 
 cloudfront_price_class = "PriceClass_100"
+
+enable_api_gateway = false # Set true to deploy API Gateway (adds ~$3.50/month)

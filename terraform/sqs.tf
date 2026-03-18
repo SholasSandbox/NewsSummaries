@@ -53,3 +53,25 @@ resource "aws_cloudwatch_metric_alarm" "summaries_dlq_messages" {
   treat_missing_data  = "notBreaching"
   alarm_actions       = var.alert_email != "" ? [aws_sns_topic.errors.arn] : []
 }
+
+resource "aws_sqs_queue" "episodes_api_dlq" {
+  name                       = "${local.prefix}-episodes-api-dlq"
+  message_retention_seconds  = 1209600
+  visibility_timeout_seconds = 30
+  sqs_managed_sse_enabled    = true
+}
+
+resource "aws_cloudwatch_metric_alarm" "episodes_api_dlq_messages" {
+  alarm_name          = "${local.prefix}-episodes-api-dlq-messages"
+  alarm_description   = "EpisodesAPI Lambda failures reached the Dead Letter Queue"
+  namespace           = "AWS/SQS"
+  metric_name         = "NumberOfMessagesSent"
+  dimensions          = { QueueName = aws_sqs_queue.episodes_api_dlq.name }
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alert_email != "" ? [aws_sns_topic.errors.arn] : []
+}

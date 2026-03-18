@@ -111,6 +111,7 @@ jobs:
           CLOUDFRONT_DOMAIN: d1234567890.cloudfront.net
           OPENAI_API_KEY: sk-test-fake
           NEWS_API_KEY: DISABLED
+          ADMIN_API_KEY: ""
           STAGE: test
           LOG_LEVEL: DEBUG
 

@@ -235,3 +235,63 @@ resource "aws_iam_role_policy" "scheduler_invoke" {
   role   = aws_iam_role.eventbridge_scheduler.id
   policy = data.aws_iam_policy_document.scheduler_invoke.json
 }
+
+# ── Episodes API Lambda Role (Lambda 4) ───────────────────────────────────────
+resource "aws_iam_role" "episodes_api" {
+  name               = "${local.prefix}-episodes-api-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume_role.json
+}
+
+resource "aws_iam_role_policy_attachment" "episodes_api_basic" {
+  role       = aws_iam_role.episodes_api.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "episodes_api_xray" {
+  role       = aws_iam_role.episodes_api.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
+data "aws_iam_policy_document" "episodes_api_inline" {
+  # Read-only access to episode metadata in DynamoDB
+  statement {
+    sid    = "DynamoDBRead"
+    effect = "Allow"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+    ]
+    resources = [
+      aws_dynamodb_table.episodes.arn,
+      "${aws_dynamodb_table.episodes.arn}/index/*",
+    ]
+  }
+
+  # Generate presigned URLs for audio (MP3) and transcript (summary JSON)
+  statement {
+    sid    = "S3PresignAudioTranscript"
+    effect = "Allow"
+    actions = [
+      "s3:GetObject",
+    ]
+    resources = [
+      "${aws_s3_bucket.content.arn}/audio/*",
+      "${aws_s3_bucket.content.arn}/summaries/*",
+    ]
+  }
+
+  # Send to DLQ
+  statement {
+    sid       = "SQSSendDLQ"
+    effect    = "Allow"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.episodes_api_dlq.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "episodes_api_inline" {
+  name   = "${local.prefix}-episodes-api-policy"
+  role   = aws_iam_role.episodes_api.id
+  policy = data.aws_iam_policy_document.episodes_api_inline.json
+}

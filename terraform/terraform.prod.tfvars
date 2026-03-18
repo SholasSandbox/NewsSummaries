@@ -26,3 +26,6 @@ lambda_memory_audio     = 1024
 lambda_timeout          = 300
 
 cloudfront_price_class = "PriceClass_100"
+
+enable_api_gateway = true # Enable API Gateway for prod admin access
+admin_api_key      = ""   # Set via TF_VAR_admin_api_key env var

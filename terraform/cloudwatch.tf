@@ -146,3 +146,23 @@ resource "aws_cloudwatch_dashboard" "main" {
     ]
   })
 }
+
+resource "aws_cloudwatch_log_group" "episodes_api" {
+  name              = "/aws/lambda/${local.prefix}-episodes-api"
+  retention_in_days = var.log_retention_days
+}
+
+resource "aws_cloudwatch_metric_alarm" "episodes_api_errors" {
+  alarm_name          = "${local.prefix}-episodes-api-errors"
+  alarm_description   = "EpisodesAPI Lambda error rate is elevated"
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  dimensions          = { FunctionName = aws_lambda_function.episodes_api.function_name }
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  threshold           = 3
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alert_email != "" ? [aws_sns_topic.errors.arn] : []
+}
