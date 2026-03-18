@@ -1,5 +1,5 @@
 pytest==7.4.0
-moto[s3,dynamodb,ssm,lambda,sqs]==4.2.0
+moto[s3,dynamodb,ssm,sqs]==5.0.0
 pytest-mock==3.12.0
 responses==0.24.1
 boto3==1.34.0

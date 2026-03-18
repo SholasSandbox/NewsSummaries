@@ -9,7 +9,7 @@ NewsSummaries is a fully serverless, event-driven pipeline deployed on AWS that:
 3. **Converts** each summary to speech using OpenAI's TTS API (`tts-1`, `nova` voice) and stores the audio as an MP3.
 4. **Distributes** audio files via CloudFront and publishes a standard iTunes-compatible RSS/podcast feed.
 
-All infrastructure is defined as code using AWS SAM (Serverless Application Model) and can be deployed or torn down in a single command.
+All infrastructure is defined as code using **HashiCorp Terraform** (`terraform/` directory) and can be deployed or torn down in a single command.
 
 ---
 
@@ -122,13 +122,14 @@ news-summaries-{stage}/
 
 ## Technology Choices & Rationale
 
-### AWS SAM vs Terraform
-SAM was chosen because:
-- Native integration with AWS Lambda and serverless primitives (no provider plugin needed)
-- `Transform: AWS::Serverless-2016-10-31` reduces boilerplate versus raw CloudFormation
-- Built-in `sam local invoke` and `sam local start-api` for offline development
-- Simpler CI/CD with the `sam deploy` command
-- Terraform would be preferred for multi-cloud or complex network infrastructure
+### Terraform vs AWS SAM / CloudFormation
+Terraform was chosen because:
+- **Provider-agnostic**: State and modules work identically on AWS, GCP, or Azure — valuable for a Solutions Architect portfolio
+- **Explicit dependency graph**: `terraform plan` shows a precise diff of every change before apply, reducing surprises in production
+- **Rich ecosystem**: The [Terraform Registry](https://registry.terraform.io) offers community modules (e.g., `terraform-aws-modules/lambda`) and thousands of providers
+- **Remote state**: S3 backend with DynamoDB locking supports team collaboration out of the box
+- **Industry standard**: Used by the majority of AWS shops; a sought-after skill in SA roles
+- AWS SAM offers simpler local invocation (`sam local`) but ties you to the AWS CloudFormation API and produces less readable state diffs
 
 ### OpenAI o3-mini vs Amazon Bedrock / Comprehend
 - `o3-mini` delivers superior summary quality with very low cost ($1.10/M input tokens)

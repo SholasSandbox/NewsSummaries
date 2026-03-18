@@ -6,16 +6,14 @@
 |---|---|---|
 | Python | 3.11 | https://python.org |
 | AWS CLI | 2.x | https://docs.aws.amazon.com/cli/latest/userguide/install-cliv2.html |
-| AWS SAM CLI | 1.110+ | https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/install-sam-cli.html |
-| Docker | 24+ (for `sam build`) | https://docs.docker.com/get-docker/ |
+| Terraform | 1.7+ | https://developer.hashicorp.com/terraform/install |
 | make | any | Pre-installed on macOS/Linux |
 
 Verify installations:
 ```bash
-aws --version          # aws-cli/2.x.x
-sam --version          # SAM CLI, version 1.x.x
-python3.11 --version   # Python 3.11.x
-docker --version       # Docker version 24.x.x
+aws --version         # aws-cli/2.x.x
+terraform version     # Terraform v1.7.x
+python3.11 --version  # Python 3.11.x
 ```
 
 ---
@@ -26,7 +24,7 @@ docker --version       # Docker version 24.x.x
 
 ```bash
 aws configure --profile news-summaries
-# Enter: Access Key ID, Secret Access Key, Region (e.g. us-east-1), Output (json)
+# Enter: Access Key ID, Secret Access Key, Region (us-east-1), Output (json)
 ```
 
 Or use AWS SSO / Identity Centre:
@@ -34,26 +32,45 @@ Or use AWS SSO / Identity Centre:
 aws sso configure --profile news-summaries
 ```
 
-### 2. Create SSM Parameters
+### 2. Bootstrap Terraform remote state
 
-Store your API keys before the first deploy:
+Terraform stores its state in S3 with DynamoDB locking.
+Create these resources **once** before the first deploy:
 
 ```bash
-# OpenAI API key (SecureString = KMS-encrypted)
-aws ssm put-parameter \
-  --name "/news-summaries/openai-api-key" \
-  --value "sk-your-openai-key-here" \
-  --type SecureString \
-  --description "OpenAI API key for NewsSummaries" \
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text --profile news-summaries)
+REGION=us-east-1
+STATE_BUCKET="news-summaries-tf-state-${ACCOUNT_ID}"
+
+# Create the state bucket
+aws s3api create-bucket \
+  --bucket "${STATE_BUCKET}" \
+  --region "${REGION}" \
   --profile news-summaries
 
-# NewsAPI.org key (optional – set "DISABLED" to skip NewsAPI)
-aws ssm put-parameter \
-  --name "/news-summaries/news-api-key" \
-  --value "your-newsapi-key-here" \
-  --type SecureString \
-  --description "NewsAPI.org key for NewsSummaries" \
+# Enable versioning (required for state safety)
+aws s3api put-bucket-versioning \
+  --bucket "${STATE_BUCKET}" \
+  --versioning-configuration Status=Enabled \
   --profile news-summaries
+
+# Enable server-side encryption
+aws s3api put-bucket-encryption \
+  --bucket "${STATE_BUCKET}" \
+  --server-side-encryption-configuration \
+    '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}' \
+  --profile news-summaries
+
+# Create DynamoDB lock table
+aws dynamodb create-table \
+  --table-name terraform-state-lock \
+  --attribute-definitions AttributeName=LockID,AttributeType=S \
+  --key-schema AttributeName=LockID,KeyType=HASH \
+  --billing-mode PAY_PER_REQUEST \
+  --region "${REGION}" \
+  --profile news-summaries
+
+echo "State bucket: ${STATE_BUCKET}"
 ```
 
 ---
@@ -62,51 +79,75 @@ aws ssm put-parameter \
 
 ```bash
 # Clone and enter the repository
-git clone https://github.com/your-org/NewsSummaries.git
+git clone https://github.com/SholasSandbox/NewsSummaries.git
 cd NewsSummaries
 
-# Create the SAM deployment bucket (one-time, per region)
-aws s3 mb s3://news-summaries-sam-artifacts-$(aws sts get-caller-identity \
-  --query Account --output text) \
-  --region us-east-1 \
-  --profile news-summaries
-
-# Install Python development dependencies
-make install
-```
-
----
-
-## Environment Configuration
-
-Copy the example environment file and fill in your values:
-
-```bash
+# Copy environment template
 cp .env.example .env
-# Edit .env with your actual values (never commit this file)
-```
+# Edit .env with your actual API keys (never commit this file)
 
-The `samconfig.toml` file controls SAM deployment settings. Review and update:
+# Install Python dev dependencies
+make install
 
-```toml
-# samconfig.toml
-[dev.deploy.parameters]
-stack_name = "news-summaries-dev"
-s3_bucket  = "news-summaries-sam-artifacts-YOUR_ACCOUNT_ID"
-region     = "us-east-1"
+# Set your state bucket in the environment (or export permanently in .bashrc / .zshrc)
+export TF_STATE_BUCKET="news-summaries-tf-state-YOUR_ACCOUNT_ID"
+export AWS_PROFILE=news-summaries
 ```
 
 ---
 
-## Build
+## Configure API Keys
+
+Sensitive values are passed to Terraform as `TF_VAR_` environment variables
+(never stored in `.tf` or `.tfvars` files):
 
 ```bash
-# Build all Lambda functions (uses Docker for consistent Python 3.11 / arm64 env)
-make build
-# Equivalent to: sam build --use-container
+# OpenAI API key — required
+export TF_VAR_openai_api_key="sk-your-openai-key-here"
+
+# NewsAPI.org key — set to DISABLED to skip
+export TF_VAR_news_api_key="your-newsapi-key-or-DISABLED"
 ```
 
-The build artifacts are placed in `.aws-sam/build/`.
+---
+
+## Build Lambda packages
+
+Before running `terraform plan` or `terraform apply`, build the Lambda deployment
+packages (pip install dependencies into `dist/`):
+
+```bash
+make build
+```
+
+This installs Python dependencies for each function into `dist/ingest_news/`,
+`dist/generate_summaries/`, and `dist/generate_audio/`. Terraform's `archive_file`
+data source then zips these directories automatically.
+
+---
+
+## Initialise Terraform
+
+```bash
+# Dev environment
+make init-dev
+# Equivalent to:
+# cd terraform && terraform init \
+#   -backend-config="bucket=${TF_STATE_BUCKET}" \
+#   -backend-config="key=news-summaries/dev/terraform.tfstate" \
+#   -backend-config="region=us-east-1"
+```
+
+---
+
+## Plan (dry run)
+
+```bash
+make plan-dev
+```
+
+Review the output carefully. Terraform shows exactly which resources will be
+**created**, **updated**, or **destroyed**.
 
 ---
 
@@ -116,49 +157,45 @@ The build artifacts are placed in `.aws-sam/build/`.
 
 ```bash
 make deploy-dev
-# Equivalent to: sam deploy --config-env dev --profile news-summaries
+# Equivalent to: cd terraform && terraform apply -var-file="terraform.tfvars" ...
 ```
 
-First-time deploy will prompt for confirmation of IAM changes. Answer **y**.
+First-time deploy takes ~3 minutes (CloudFront distribution creation is slow).
 
 ### Production environment
 
 ```bash
-make deploy-prod
-# Equivalent to: sam deploy --config-env prod --profile news-summaries
+make plan-prod    # Review the plan first
+make deploy-prod  # Prompts for confirmation
 ```
 
-Production deploys require an explicit `--config-env prod` and are protected
-by a manual GitHub Actions approval step in the CI/CD workflow.
+---
+
+## View Outputs
+
+After a successful deploy:
+
+```bash
+make outputs-dev
+# or: cd terraform && terraform output
+```
+
+Key outputs:
+| Output | Description |
+|---|---|
+| `cloudfront_domain` | Base domain for the CDN |
+| `podcast_feed_url` | Full URL of the RSS podcast feed |
+| `content_bucket_name` | S3 bucket for all content |
+| `episodes_table_name` | DynamoDB table name |
 
 ---
 
 ## Post-deployment Verification
 
-### 1. Check stack outputs
+### 1. Trigger a manual ingest run
 
 ```bash
-aws cloudformation describe-stacks \
-  --stack-name news-summaries-dev \
-  --query 'Stacks[0].Outputs' \
-  --profile news-summaries
-```
-
-Note the `CloudFrontDomain` and `RssFeedUrl` outputs.
-
-### 2. Test the IngestNews function
-
-```bash
-aws lambda invoke \
-  --function-name news-summaries-ingest-dev \
-  --payload '{}' \
-  --log-type Tail \
-  --query 'LogResult' \
-  --output text \
-  --profile news-summaries \
-  /tmp/ingest-response.json | base64 -d
-
-cat /tmp/ingest-response.json
+make run-ingest-dev
 ```
 
 Expected response:
@@ -166,94 +203,132 @@ Expected response:
 {"statusCode": 200, "body": "{\"run_date\": \"2024-01-15\", \"articles_fetched\": 120, \"articles_stored\": 47}"}
 ```
 
-### 3. Monitor pipeline progress
+### 2. Monitor pipeline progress
 
 ```bash
-# Tail all Lambda logs in real time
-make logs-ingest     # IngestNews logs
+make logs-ingest     # IngestNews CloudWatch logs
 make logs-summaries  # GenerateSummaries logs
 make logs-audio      # GenerateAudio logs
 ```
 
-### 4. Verify RSS feed
+### 3. Verify RSS feed
 
 ```bash
-# Get the RSS feed URL from stack outputs, then:
-CLOUDFRONT_DOMAIN=$(aws cloudformation describe-stacks \
-  --stack-name news-summaries-dev \
-  --query 'Stacks[0].Outputs[?OutputKey==`CloudFrontDomain`].OutputValue' \
-  --output text)
-
-curl -s "https://${CLOUDFRONT_DOMAIN}/rss/feed.xml" | head -50
+FEED_URL=$(cd terraform && terraform output -raw podcast_feed_url)
+curl -s "${FEED_URL}" | head -50
 ```
 
-### 5. Check DynamoDB records
+### 4. Check DynamoDB records
 
 ```bash
 aws dynamodb scan \
-  --table-name news-summaries-episodes-dev \
+  --table-name news-summaries-dev-episodes \
   --limit 5 \
   --profile news-summaries
 ```
 
 ---
 
-## Updating SSM Parameters
+## Updating Infrastructure
 
-To rotate API keys without redeploying:
+Edit the relevant `.tf` file in `terraform/`, then:
 
 ```bash
-aws ssm put-parameter \
-  --name "/news-summaries/openai-api-key" \
-  --value "sk-new-key" \
-  --type SecureString \
-  --overwrite \
-  --profile news-summaries
+make plan-dev    # Review changes
+make deploy-dev  # Apply changes
 ```
 
-Lambda picks up the new value on the next cold start.
+Terraform only modifies resources that have changed — safe to run repeatedly.
+
+---
+
+## Rotating API Keys
+
+Update the environment variable and re-apply:
+
+```bash
+export TF_VAR_openai_api_key="sk-new-key-here"
+make deploy-dev
+```
+
+Terraform updates the Lambda environment variables in-place. No downtime.
+
+---
+
+## CI/CD — GitHub Actions
+
+The `.github/workflows/terraform.yml` workflow automatically:
+- **On every PR**: runs lint, tests, `terraform fmt -check`, `terraform validate`, and `terraform plan` (posts the plan as a PR comment)
+- **On push to main**: runs `terraform apply` to deploy to dev
+- **Manual `workflow_dispatch`**: triggers a prod deploy after approval
+
+Required GitHub Secrets:
+
+| Secret | Description |
+|---|---|
+| `AWS_DEPLOY_ROLE_ARN_DEV` | IAM role ARN for OIDC dev deploys |
+| `AWS_DEPLOY_ROLE_ARN_PROD` | IAM role ARN for OIDC prod deploys |
+| `TF_STATE_BUCKET` | S3 bucket name for Terraform state |
+| `TF_VAR_openai_api_key` | OpenAI API key |
+| `TF_VAR_news_api_key` | NewsAPI key (`DISABLED` to skip) |
+| `ALERT_EMAIL` | (optional) email for CloudWatch alarms |
+
+### Setting up AWS OIDC for GitHub Actions
+
+```bash
+# Create an OIDC provider for GitHub in your AWS account (one-time)
+aws iam create-open-id-connect-provider \
+  --url https://token.actions.githubusercontent.com \
+  --client-id-list sts.amazonaws.com \
+  --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
+```
+
+Then create an IAM role with a trust policy allowing GitHub Actions to assume it.
+See the [AWS documentation](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc.html) for details.
 
 ---
 
 ## Tearing Down
 
 ```bash
-# Delete dev stack (also deletes all S3 objects in the bucket)
-aws cloudformation delete-stack \
-  --stack-name news-summaries-dev \
-  --profile news-summaries
+# Destroy dev infrastructure (prompts for confirmation)
+cd terraform
+terraform destroy -var-file="terraform.tfvars" \
+  -var="openai_api_key=${TF_VAR_openai_api_key}" \
+  -var="news_api_key=${TF_VAR_news_api_key}"
 
-# Empty and delete the S3 bucket first if it has versioned objects
-aws s3 rm s3://news-summaries-dev --recursive
-aws s3api delete-bucket --bucket news-summaries-dev
+# The S3 bucket has force_destroy=true in dev so it will be emptied automatically.
+# In prod (force_destroy=false), empty the bucket first:
+# aws s3 rm s3://BUCKET_NAME --recursive
 ```
 
 ---
 
 ## Troubleshooting
 
-### `Error: No samconfig.toml found`
-Run `make build` first, or ensure you are in the repository root directory.
+### `Error: Backend initialization required`
+Run `make init-dev` (or `init-prod`) before plan/apply.
 
-### `AccessDeniedException` during deploy
-Ensure your IAM user/role has `CloudFormation:*`, `Lambda:*`, `S3:*`, `DynamoDB:*`, and `IAM:PassRole` permissions.
+### `Error: No valid credential sources found`
+Ensure `AWS_PROFILE` is set or `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` are exported.
+
+### `AccessDeniedException` during apply
+Ensure your IAM user/role has permissions for Lambda, S3, DynamoDB, CloudFront, IAM, EventBridge, SQS, SNS, and CloudWatch.
 
 ### Lambda timeout on first run
-The first RSS fetch may take longer than usual due to slow upstream feeds. Increase `Timeout` in `template.yaml` temporarily and redeploy.
+The first RSS fetch may take longer than usual due to slow upstream feeds. Increase `lambda_timeout` in `terraform.tfvars` and re-apply.
 
 ### OpenAI `RateLimitError`
 The code retries with exponential backoff up to 3 times. If errors persist, check your OpenAI usage tier and request a quota increase.
 
+### CloudFront returning 403 on audio files
+Verify that the S3 bucket policy `AllowCloudFrontReadAudio` statement exists and the `AWS:SourceArn` condition matches the actual CloudFront distribution ARN (`terraform output`).
+
 ### DynamoDB stream not triggering `GenerateAudio`
-Check that the Lambda has DynamoDB stream permissions and that the stream is `ENABLED` on the table:
+Check that `stream_enabled = true` on the DynamoDB table and the `aws_lambda_event_source_mapping` resource exists in the Terraform state:
 ```bash
-aws dynamodb describe-table \
-  --table-name news-summaries-episodes-dev \
-  --query 'Table.StreamSpecification'
+cd terraform && terraform state list | grep event_source_mapping
 ```
 
-### CloudFront returning 403 on audio files
-Verify that the S3 bucket policy `AllowCloudFrontOAC` statement is present and the `AWS:SourceArn` condition matches the actual CloudFront distribution ARN.
-
-### RSS feed not updating
-Check CloudWatch logs for the `GenerateAudio` function. The RSS feed is regenerated after every batch of DynamoDB stream records. If no audio has been generated yet, the feed will not be created.
+### `Error: creating Lambda function: InvalidParameterValueException`
+The Lambda deployment package must exist before apply. Run `make build` first.

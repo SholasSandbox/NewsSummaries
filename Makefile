@@ -1,11 +1,13 @@
-.PHONY: install build deploy-dev deploy-prod test lint local logs-ingest logs-summaries logs-audio clean
+.PHONY: install build deploy-dev deploy-prod plan-dev plan-prod init-dev init-prod \
+        test test-fast lint format typecheck \
+        logs-ingest logs-summaries logs-audio \
+        run-ingest-dev tf-fmt validate clean help
 
-STAGE_DEV  := dev
-STAGE_PROD := prod
+STAGE_DEV   := dev
+STAGE_PROD  := prod
 AWS_PROFILE ?= default
-STACK_DEV  := news-summaries-dev
-STACK_PROD := news-summaries-prod
-REGION     := us-east-1
+AWS_REGION  ?= us-east-1
+TF_DIR      := terraform
 
 # ─────────────────────────────────────────────
 # Dependencies
@@ -28,30 +30,88 @@ install: ## Install all Python dependencies for local development
 	pip install -r tests/requirements.txt
 
 # ─────────────────────────────────────────────
-# Build
+# Build Lambda packages (pip install → dist/)
+# Terraform picks these up automatically via archive_file
 # ─────────────────────────────────────────────
 
-build: ## Build Lambda packages using SAM (Docker required)
-	sam build --use-container
-
-build-no-container: ## Build Lambda packages without Docker (requires Python 3.11 locally)
-	sam build
+build: ## Install Lambda dependencies into dist/ (required before terraform plan/apply)
+	@echo "Building IngestNews..."
+	@rm -rf dist/ingest_news && mkdir -p dist/ingest_news
+	@cp src/ingest_news/handler.py dist/ingest_news/
+	@cp -r src/shared dist/ingest_news/
+	@pip install -r src/ingest_news/requirements.txt -t dist/ingest_news/ --quiet --upgrade
+	@echo "Building GenerateSummaries..."
+	@rm -rf dist/generate_summaries && mkdir -p dist/generate_summaries
+	@cp src/generate_summaries/handler.py dist/generate_summaries/
+	@cp -r src/shared dist/generate_summaries/
+	@pip install -r src/generate_summaries/requirements.txt -t dist/generate_summaries/ --quiet --upgrade
+	@echo "Building GenerateAudio..."
+	@rm -rf dist/generate_audio && mkdir -p dist/generate_audio
+	@cp src/generate_audio/handler.py dist/generate_audio/
+	@cp -r src/shared dist/generate_audio/
+	@pip install -r src/generate_audio/requirements.txt -t dist/generate_audio/ --quiet --upgrade
+	@echo "Build complete. dist/ is ready."
 
 # ─────────────────────────────────────────────
-# Deploy
+# Terraform — Initialise
 # ─────────────────────────────────────────────
 
-deploy-dev: build ## Build and deploy to the dev environment
-	sam deploy \
-		--config-env $(STAGE_DEV) \
-		--profile $(AWS_PROFILE) \
-		--no-fail-on-empty-changeset
+init-dev: ## Initialise Terraform for the dev environment (set TF_STATE_BUCKET env var)
+	cd $(TF_DIR) && terraform init \
+		-backend-config="bucket=$(TF_STATE_BUCKET)" \
+		-backend-config="key=news-summaries/dev/terraform.tfstate" \
+		-backend-config="region=$(AWS_REGION)" \
+		-reconfigure
 
-deploy-prod: build ## Build and deploy to the prod environment (requires confirmation)
-	sam deploy \
-		--config-env $(STAGE_PROD) \
-		--profile $(AWS_PROFILE) \
-		--no-fail-on-empty-changeset
+init-prod: ## Initialise Terraform for the prod environment
+	cd $(TF_DIR) && terraform init \
+		-backend-config="bucket=$(TF_STATE_BUCKET)" \
+		-backend-config="key=news-summaries/prod/terraform.tfstate" \
+		-backend-config="region=$(AWS_REGION)" \
+		-reconfigure
+
+# ─────────────────────────────────────────────
+# Terraform — Plan & Apply
+# ─────────────────────────────────────────────
+
+plan-dev: build init-dev ## Plan infrastructure changes for dev
+	cd $(TF_DIR) && terraform plan \
+		-var-file="terraform.tfvars" \
+		-var="openai_api_key=$(TF_VAR_openai_api_key)" \
+		-var="news_api_key=$(TF_VAR_news_api_key)" \
+		-input=false
+
+deploy-dev: build init-dev ## Build and deploy to the dev environment
+	cd $(TF_DIR) && terraform apply \
+		-var-file="terraform.tfvars" \
+		-var="openai_api_key=$(TF_VAR_openai_api_key)" \
+		-var="news_api_key=$(TF_VAR_news_api_key)" \
+		-input=false \
+		-auto-approve
+
+plan-prod: build init-prod ## Plan infrastructure changes for prod
+	cd $(TF_DIR) && terraform plan \
+		-var-file="terraform.prod.tfvars" \
+		-var="openai_api_key=$(TF_VAR_openai_api_key)" \
+		-var="news_api_key=$(TF_VAR_news_api_key)" \
+		-input=false
+
+deploy-prod: build init-prod ## Build and deploy to the prod environment (requires confirmation)
+	cd $(TF_DIR) && terraform apply \
+		-var-file="terraform.prod.tfvars" \
+		-var="openai_api_key=$(TF_VAR_openai_api_key)" \
+		-var="news_api_key=$(TF_VAR_news_api_key)" \
+		-input=false
+
+# ─────────────────────────────────────────────
+# Terraform — Format & Validate
+# ─────────────────────────────────────────────
+
+tf-fmt: ## Auto-format all Terraform files
+	cd $(TF_DIR) && terraform fmt -recursive
+
+validate: ## Validate Terraform configuration syntax
+	cd $(TF_DIR) && terraform validate
 
 # ─────────────────────────────────────────────
 # Testing
@@ -76,7 +136,7 @@ lint: ## Run all linters (flake8, black --check, isort --check)
 	black --check src/ tests/
 	isort --check-only src/ tests/
 
-format: ## Auto-format code with black and isort
+format: ## Auto-format Python code with black and isort
 	black src/ tests/
 	isort src/ tests/
 
@@ -84,98 +144,60 @@ typecheck: ## Run mypy type checking
 	mypy src/ --ignore-missing-imports --no-strict-optional
 
 # ─────────────────────────────────────────────
-# Local development
-# ─────────────────────────────────────────────
-
-local: ## Start SAM local API Gateway on port 3000
-	sam local start-api --port 3000
-
-invoke-ingest: ## Locally invoke the IngestNews function
-	sam local invoke IngestNewsFunction \
-		--event tests/events/ingest_news_event.json \
-		--env-vars tests/events/env.json
-
-invoke-summaries: ## Locally invoke the GenerateSummaries function
-	sam local invoke GenerateSummariesFunction \
-		--event tests/events/s3_event.json \
-		--env-vars tests/events/env.json
-
-invoke-audio: ## Locally invoke the GenerateAudio function
-	sam local invoke GenerateAudioFunction \
-		--event tests/events/dynamodb_stream_event.json \
-		--env-vars tests/events/env.json
-
-# ─────────────────────────────────────────────
 # CloudWatch Logs
 # ─────────────────────────────────────────────
 
 logs-ingest: ## Tail CloudWatch logs for IngestNews (dev)
-	sam logs \
-		--name IngestNewsFunction \
-		--stack-name $(STACK_DEV) \
-		--tail \
+	aws logs tail /aws/lambda/news-summaries-dev-ingest-news \
+		--follow \
+		--format short \
 		--profile $(AWS_PROFILE)
 
 logs-summaries: ## Tail CloudWatch logs for GenerateSummaries (dev)
-	sam logs \
-		--name GenerateSummariesFunction \
-		--stack-name $(STACK_DEV) \
-		--tail \
+	aws logs tail /aws/lambda/news-summaries-dev-generate-summaries \
+		--follow \
+		--format short \
 		--profile $(AWS_PROFILE)
 
 logs-audio: ## Tail CloudWatch logs for GenerateAudio (dev)
-	sam logs \
-		--name GenerateAudioFunction \
-		--stack-name $(STACK_DEV) \
-		--tail \
+	aws logs tail /aws/lambda/news-summaries-dev-generate-audio \
+		--follow \
+		--format short \
 		--profile $(AWS_PROFILE)
 
 # ─────────────────────────────────────────────
-# Manual triggers
+# Manual Lambda triggers
 # ─────────────────────────────────────────────
 
 run-ingest-dev: ## Manually trigger the IngestNews Lambda in dev
 	aws lambda invoke \
-		--function-name news-summaries-ingest-$(STAGE_DEV) \
+		--function-name news-summaries-dev-ingest-news \
 		--payload '{}' \
 		--log-type Tail \
 		--query 'LogResult' \
 		--output text \
+		--region $(AWS_REGION) \
 		--profile $(AWS_PROFILE) \
 		/tmp/ingest-response.json | base64 -d
 	@echo ""
 	@cat /tmp/ingest-response.json
 
 # ─────────────────────────────────────────────
-# SSM setup helpers
+# Outputs (after deploy)
 # ─────────────────────────────────────────────
 
-setup-ssm: ## Create required SSM parameters (prompts for values)
-	@read -p "Enter OpenAI API Key: " OPENAI_KEY; \
-	aws ssm put-parameter \
-		--name "/news-summaries/openai-api-key" \
-		--value "$$OPENAI_KEY" \
-		--type SecureString \
-		--overwrite \
-		--profile $(AWS_PROFILE)
-	@read -p "Enter NewsAPI Key (or 'DISABLED'): " NEWS_KEY; \
-	aws ssm put-parameter \
-		--name "/news-summaries/news-api-key" \
-		--value "$$NEWS_KEY" \
-		--type SecureString \
-		--overwrite \
-		--profile $(AWS_PROFILE)
+outputs-dev: ## Show Terraform outputs for dev environment
+	cd $(TF_DIR) && terraform output
 
 # ─────────────────────────────────────────────
 # Clean
 # ─────────────────────────────────────────────
 
-clean: ## Remove SAM build artifacts and Python cache files
-	rm -rf .aws-sam/
-	rm -rf coverage.xml
+clean: ## Remove build artifacts and Python cache files
+	rm -rf dist/
+	rm -rf coverage.xml test-results.xml
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
 	find . -name "*.pyc" -delete 2>/dev/null || true
 
 # ─────────────────────────────────────────────

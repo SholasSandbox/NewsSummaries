@@ -3,9 +3,9 @@
 ## Prerequisites
 
 - Python 3.11
-- Docker (for `sam local` and `sam build --use-container`)
+- Terraform 1.7+ (`brew install terraform` or https://developer.hashicorp.com/terraform/install)
 - AWS CLI v2
-- AWS SAM CLI 1.110+
+- make
 
 ---
 
@@ -24,28 +24,33 @@ source .venv/bin/activate          # macOS / Linux
 make install
 ```
 
-`make install` runs:
-```bash
-pip install -e ".[dev]"
-pip install -r src/ingest_news/requirements.txt
-pip install -r src/generate_summaries/requirements.txt
-pip install -r src/generate_audio/requirements.txt
-pip install -r tests/requirements.txt
-```
-
 ---
 
 ## Project Structure
 
 ```
 NewsSummaries/
-├── template.yaml               # SAM / CloudFormation template
-├── samconfig.toml              # SAM CLI configuration (dev + prod envs)
-├── Makefile                    # Developer shortcuts
-├── .env.example                # Template for local environment variables
+├── terraform/                      # All infrastructure as Terraform HCL
+│   ├── providers.tf                # AWS provider + required_providers
+│   ├── backend.tf                  # S3 remote state configuration
+│   ├── variables.tf                # Input variable definitions
+│   ├── locals.tf                   # Computed local values
+│   ├── outputs.tf                  # Stack outputs
+│   ├── iam.tf                      # IAM roles and least-privilege policies
+│   ├── s3.tf                       # S3 bucket, lifecycle, notifications
+│   ├── dynamodb.tf                 # DynamoDB table, GSI, TTL, streams
+│   ├── lambda.tf                   # Lambda functions + packaging
+│   ├── eventbridge.tf              # EventBridge Scheduler (twice daily)
+│   ├── cloudfront.tf               # CloudFront CDN distribution
+│   ├── sqs.tf                      # Dead Letter Queues + alarms
+│   ├── cloudwatch.tf               # Log groups, alarms, dashboard, SNS
+│   ├── terraform.tfvars            # Dev defaults (non-sensitive)
+│   └── terraform.prod.tfvars       # Prod overrides
+├── Makefile                        # Developer shortcuts
+├── .env.example                    # Environment variable template
 ├── src/
 │   ├── ingest_news/
-│   │   ├── handler.py          # Lambda handler
+│   │   ├── handler.py              # Lambda handler
 │   │   └── requirements.txt
 │   ├── generate_summaries/
 │   │   ├── handler.py
@@ -55,9 +60,10 @@ NewsSummaries/
 │   │   └── requirements.txt
 │   └── shared/
 │       ├── __init__.py
-│       └── utils.py            # Shared utilities (logger, secrets, retry, RSS)
+│       └── utils.py                # Shared utilities (logger, retry, RSS)
+├── dist/                           # Built Lambda packages (git-ignored)
 ├── tests/
-│   ├── conftest.py             # Pytest fixtures (moto mocks)
+│   ├── conftest.py                 # Pytest fixtures (moto mocks)
 │   ├── requirements.txt
 │   └── unit/
 │       ├── test_ingest_news.py
@@ -67,7 +73,7 @@ NewsSummaries/
     ├── ARCHITECTURE.md
     ├── DEPLOYMENT.md
     ├── COST_ESTIMATION.md
-    └── DEVELOPMENT.md          # This file
+    └── DEVELOPMENT.md              # This file
 ```
 
 ---
@@ -88,58 +94,38 @@ pytest -k "test_deduplicate" -v
 pytest --cov=src --cov-report=term-missing
 ```
 
-Tests use [moto](https://github.com/getmoto/moto) to mock AWS services (S3, DynamoDB, SSM) in-process — no real AWS credentials needed for unit tests.
+Tests use [moto](https://github.com/getmoto/moto) to mock AWS services (S3, DynamoDB)
+in-process — no real AWS credentials needed.
 
 ---
 
-## Local Lambda Invocation with SAM
+## Local Lambda Testing (without AWS)
 
-Build first (required after any code change):
-
-```bash
-make build
-# or: sam build --use-container
-```
-
-### Invoke a function locally
+Because the functions are plain Python, you can invoke them locally by setting
+the required environment variables and calling the handler directly:
 
 ```bash
-# IngestNews (uses a mock event)
-sam local invoke IngestNewsFunction \
-  --event tests/events/ingest_news_event.json \
-  --env-vars tests/events/env.json
+# Export the same env vars the Lambda gets in AWS
+export AWS_DEFAULT_REGION=us-east-1
+export AWS_ACCESS_KEY_ID=testing
+export AWS_SECRET_ACCESS_KEY=testing
+export S3_BUCKET=local-news-summaries
+export DYNAMODB_TABLE=local-episodes
+export CLOUDFRONT_DOMAIN=d1234567890.cloudfront.net
+export OPENAI_API_KEY=sk-fake
+export NEWS_API_KEY=DISABLED
+export STAGE=dev
+export LOG_LEVEL=DEBUG
 
-# GenerateSummaries with an S3 event
-sam local invoke GenerateSummariesFunction \
-  --event tests/events/s3_event.json \
-  --env-vars tests/events/env.json
-
-# GenerateAudio with a DynamoDB stream event
-sam local invoke GenerateAudioFunction \
-  --event tests/events/dynamodb_stream_event.json \
-  --env-vars tests/events/env.json
+# Run the ingest handler (uses moto-style mocks if you wrap it, or hits real RSS)
+python3 -c "
+import src.ingest_news.handler as h
+print(h.lambda_handler({}, type('ctx', (), {'function_name': 'local', 'aws_request_id': 'test'})()))
+"
 ```
 
-Create `tests/events/env.json` with your local environment variables:
-```json
-{
-  "IngestNewsFunction": {
-    "S3_BUCKET_NAME": "local-news-summaries",
-    "DYNAMODB_TABLE_NAME": "local-episodes",
-    "LOG_LEVEL": "DEBUG",
-    "OPENAI_API_KEY": "sk-fake-key-for-local",
-    "NEWS_API_KEY": "DISABLED",
-    "GENERATE_SUMMARIES_FUNCTION": "news-summaries-summaries-dev"
-  }
-}
-```
-
-### Start a local API Gateway (if you add HTTP endpoints)
-
-```bash
-make local
-# or: sam local start-api --port 3000
-```
+For full integration testing against real AWS, deploy to the dev environment with
+`make deploy-dev`, then use `make run-ingest-dev`.
 
 ---
 
@@ -161,16 +147,18 @@ def s3_bucket(aws_credentials):
         yield s3
 ```
 
-The `aws_credentials` fixture in `conftest.py` sets dummy environment variables so `boto3` doesn't attempt real AWS auth.
+The `aws_credentials` fixture in `conftest.py` sets dummy environment variables so
+`boto3` doesn't attempt real AWS auth.
 
 ---
 
 ## Mocking OpenAI
 
-Use `pytest-mock` or `responses` to mock OpenAI HTTP calls:
+Use `pytest-mock` to mock OpenAI HTTP calls:
 
 ```python
 from unittest.mock import MagicMock, patch
+import json
 
 def test_generate_summary(mock_s3):
     mock_choice = MagicMock()
@@ -191,23 +179,38 @@ def test_generate_summary(mock_s3):
 
 ---
 
+## Terraform Workflow
+
+```bash
+# Format all Terraform files
+make tf-fmt
+
+# Validate syntax
+make validate
+
+# Plan changes (dry run)
+make plan-dev
+
+# Apply changes
+make deploy-dev
+```
+
+To inspect the current state:
+```bash
+cd terraform
+terraform state list              # All managed resources
+terraform state show aws_s3_bucket.content  # Details of one resource
+terraform output                  # Stack outputs
+```
+
+---
+
 ## Code Style and Linting
 
 ```bash
-# Run all linters
-make lint
-
-# Format code with black
-black src/ tests/
-
-# Check imports with isort
-isort src/ tests/
-
-# Type checking with mypy
-mypy src/ --ignore-missing-imports
-
-# Lint with flake8
-flake8 src/ tests/ --max-line-length 120
+make lint       # Run flake8, black --check, isort --check
+make format     # Auto-format with black and isort
+make typecheck  # mypy type checking
 ```
 
 ### Style conventions
@@ -216,30 +219,19 @@ flake8 src/ tests/ --max-line-length 120
 - String quotes: **double quotes** (enforced by `black`)
 - Type hints: used on all function signatures
 - Docstrings: Google-style for modules, classes, and public functions
-- Structured log messages: always emit JSON strings as the `message` field
-
-### Pre-commit hooks (optional)
-
-```bash
-pip install pre-commit
-pre-commit install
-# Now lint/format runs automatically on git commit
-```
+- Structured log messages: JSON strings as the `message` field
 
 ---
 
 ## Adding a New RSS Feed
 
-Edit `RSS_FEEDS` in `src/ingest_news/handler.py`:
+Edit `rss_feeds` in `terraform/terraform.tfvars`:
 
-```python
-RSS_FEEDS = [
-    ...
-    {"name": "My New Feed", "url": "https://example.com/rss.xml", "category": "technology"},
-]
+```hcl
+rss_feeds = "https://feeds.bbci.co.uk/news/rss.xml,...,https://new-feed.example.com/rss.xml"
 ```
 
-Valid categories: `general`, `world`, `business`, `technology`, `science`, `health`, `sports`, `entertainment`.
+Then `make deploy-dev` to update the Lambda environment variable.
 
 ---
 
@@ -247,13 +239,15 @@ Valid categories: `general`, `world`, `business`, `technology`, `science`, `heal
 
 | Variable | Lambda | Description |
 |---|---|---|
-| `S3_BUCKET_NAME` | all | S3 bucket name |
-| `DYNAMODB_TABLE_NAME` | all | DynamoDB table name |
+| `S3_BUCKET` | all | S3 bucket name |
+| `DYNAMODB_TABLE` | all | DynamoDB table name |
+| `CLOUDFRONT_DOMAIN` | all | CloudFront domain for audio URLs |
 | `LOG_LEVEL` | all | `DEBUG` / `INFO` / `WARNING` / `ERROR` |
+| `STAGE` | all | `dev` or `prod` |
 | `OPENAI_API_KEY` | summaries, audio | OpenAI API key |
 | `NEWS_API_KEY` | ingest | NewsAPI.org key (`DISABLED` to skip) |
-| `GENERATE_SUMMARIES_FUNCTION` | ingest | ARN/name of GenerateSummaries Lambda |
-| `CLOUDFRONT_DOMAIN` | audio | CloudFront domain for audio URLs |
+| `RSS_FEEDS` | ingest | Comma-separated RSS feed URLs |
+| `TTS_VOICE` | audio | OpenAI TTS voice (nova, alloy, echo…) |
 | `PODCAST_TITLE` | audio | Podcast show title in RSS feed |
 | `PODCAST_DESCRIPTION` | audio | Podcast show description |
 | `PODCAST_AUTHOR` | audio | Author name in RSS feed |
