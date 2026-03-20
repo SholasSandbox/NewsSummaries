@@ -10,16 +10,14 @@ from __future__ import annotations
 import json
 import os
 from typing import Any
-from unittest.mock import MagicMock, patch
 
 import boto3
-import pytest
 from moto import mock_aws
 
 # Set environment variables before importing the handler
 os.environ.setdefault("S3_BUCKET_NAME", "test-news-summaries")
 os.environ.setdefault("DYNAMODB_TABLE_NAME", "test-news-summaries-episodes")
-os.environ.setdefault("ADMIN_API_KEY", "")          # auth disabled in tests
+os.environ.setdefault("ADMIN_API_KEY", "")  # auth disabled in tests
 os.environ.setdefault("PRESIGNED_URL_EXPIRY_SECONDS", "3600")
 os.environ.setdefault("LOG_LEVEL", "DEBUG")
 os.environ.setdefault("CLOUDFRONT_DOMAIN", "test.cloudfront.net")
@@ -57,9 +55,7 @@ def _make_apigw_event(
     """Build a minimal API Gateway HTTP API v2 event."""
     return {
         "rawPath": path,
-        "requestContext": {
-            "http": {"method": method}
-        },
+        "requestContext": {"http": {"method": method}},
         "pathParameters": path_params or {},
         "queryStringParameters": query_params or {},
         "headers": {"authorization": auth_header} if auth_header else {},
@@ -106,6 +102,7 @@ def _make_table(dynamodb_resource: Any) -> Any:
 # Tests: List Episodes  GET /episodes
 # ─────────────────────────────────────────────
 
+
 class TestListEpisodes:
 
     @mock_aws
@@ -116,6 +113,7 @@ class TestListEpisodes:
         table.put_item(Item=SAMPLE_EPISODE)
 
         from src.episodes_api import handler as h
+
         # Reload module-level clients to use mocked AWS
         h.dynamodb = ddb
         h.episodes_table = ddb.Table(TEST_TABLE)
@@ -139,10 +137,13 @@ class TestListEpisodes:
         table.put_item(Item=other)
 
         from src.episodes_api import handler as h
+
         h.dynamodb = ddb
         h.episodes_table = ddb.Table(TEST_TABLE)
 
-        event = _make_apigw_event("GET", "/episodes", query_params={"date": "2024-01-15"})
+        event = _make_apigw_event(
+            "GET", "/episodes", query_params={"date": "2024-01-15"}
+        )
         result = h.lambda_handler(event, {})
 
         assert result["statusCode"] == 200
@@ -157,6 +158,7 @@ class TestListEpisodes:
         _make_table(ddb)
 
         from src.episodes_api import handler as h
+
         h.dynamodb = ddb
         h.episodes_table = ddb.Table(TEST_TABLE)
 
@@ -173,6 +175,7 @@ class TestListEpisodes:
 # Tests: Get Single Episode  GET /episodes/{id}
 # ─────────────────────────────────────────────
 
+
 class TestGetEpisode:
 
     @mock_aws
@@ -183,6 +186,7 @@ class TestGetEpisode:
         table.put_item(Item=SAMPLE_EPISODE)
 
         from src.episodes_api import handler as h
+
         h.dynamodb = ddb
         h.episodes_table = ddb.Table(TEST_TABLE)
 
@@ -205,6 +209,7 @@ class TestGetEpisode:
         _make_table(ddb)
 
         from src.episodes_api import handler as h
+
         h.dynamodb = ddb
         h.episodes_table = ddb.Table(TEST_TABLE)
 
@@ -226,6 +231,7 @@ class TestGetEpisode:
         _make_table(ddb)
 
         from src.episodes_api import handler as h
+
         h.dynamodb = ddb
         h.episodes_table = ddb.Table(TEST_TABLE)
 
@@ -242,6 +248,7 @@ class TestGetEpisode:
 # ─────────────────────────────────────────────
 # Tests: Presigned Audio URL  GET /episodes/{id}/audio
 # ─────────────────────────────────────────────
+
 
 class TestGetAudioUrl:
 
@@ -261,6 +268,7 @@ class TestGetAudioUrl:
         )
 
         from src.episodes_api import handler as h
+
         h.dynamodb = ddb
         h.episodes_table = ddb.Table(TEST_TABLE)
         h.s3_client = s3
@@ -284,11 +292,15 @@ class TestGetAudioUrl:
         ddb = boto3.resource("dynamodb", region_name=TEST_REGION)
         table = _make_table(ddb)
         # Episode without audio_s3_key
-        episode_no_audio = {k: v for k, v in SAMPLE_EPISODE.items()
-                            if k not in ("audio_url", "audio_s3_key")}
+        episode_no_audio = {
+            k: v
+            for k, v in SAMPLE_EPISODE.items()
+            if k not in ("audio_url", "audio_s3_key")
+        }
         table.put_item(Item=episode_no_audio)
 
         from src.episodes_api import handler as h
+
         h.dynamodb = ddb
         h.episodes_table = ddb.Table(TEST_TABLE)
 
@@ -308,6 +320,7 @@ class TestGetAudioUrl:
 # Tests: Presigned Transcript URL  GET /episodes/{id}/transcript
 # ─────────────────────────────────────────────
 
+
 class TestGetTranscriptUrl:
 
     @mock_aws
@@ -326,6 +339,7 @@ class TestGetTranscriptUrl:
         )
 
         from src.episodes_api import handler as h
+
         h.dynamodb = ddb
         h.episodes_table = ddb.Table(TEST_TABLE)
         h.s3_client = s3
@@ -347,6 +361,7 @@ class TestGetTranscriptUrl:
 # Tests: Auth
 # ─────────────────────────────────────────────
 
+
 class TestAuthentication:
 
     @mock_aws
@@ -356,13 +371,16 @@ class TestAuthentication:
         _make_table(ddb)
 
         from src.episodes_api import handler as h
+
         h.dynamodb = ddb
         h.episodes_table = ddb.Table(TEST_TABLE)
         original_key = h.ADMIN_API_KEY
         h.ADMIN_API_KEY = "secret-key-123"
 
         try:
-            event = _make_apigw_event("GET", "/episodes", auth_header="Bearer secret-key-123")
+            event = _make_apigw_event(
+                "GET", "/episodes", auth_header="Bearer secret-key-123"
+            )
             result = h.lambda_handler(event, {})
             assert result["statusCode"] == 200
         finally:
@@ -375,13 +393,16 @@ class TestAuthentication:
         _make_table(ddb)
 
         from src.episodes_api import handler as h
+
         h.dynamodb = ddb
         h.episodes_table = ddb.Table(TEST_TABLE)
         original_key = h.ADMIN_API_KEY
         h.ADMIN_API_KEY = "correct-key"
 
         try:
-            event = _make_apigw_event("GET", "/episodes", auth_header="Bearer wrong-key")
+            event = _make_apigw_event(
+                "GET", "/episodes", auth_header="Bearer wrong-key"
+            )
             result = h.lambda_handler(event, {})
             assert result["statusCode"] == 401
         finally:
@@ -394,6 +415,7 @@ class TestAuthentication:
         _make_table(ddb)
 
         from src.episodes_api import handler as h
+
         h.dynamodb = ddb
         h.episodes_table = ddb.Table(TEST_TABLE)
         original_key = h.ADMIN_API_KEY
@@ -411,6 +433,7 @@ class TestAuthentication:
 # Tests: Unknown routes
 # ─────────────────────────────────────────────
 
+
 class TestRouting:
 
     @mock_aws
@@ -420,6 +443,7 @@ class TestRouting:
         _make_table(ddb)
 
         from src.episodes_api import handler as h
+
         h.dynamodb = ddb
         h.episodes_table = ddb.Table(TEST_TABLE)
 
@@ -435,6 +459,7 @@ class TestRouting:
         _make_table(ddb)
 
         from src.episodes_api import handler as h
+
         h.dynamodb = ddb
         h.episodes_table = ddb.Table(TEST_TABLE)
 

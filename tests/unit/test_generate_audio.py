@@ -7,9 +7,8 @@ AWS services are mocked with moto; OpenAI TTS calls are mocked with unittest.moc
 
 from __future__ import annotations
 
-import json
 import os
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 from xml.etree import ElementTree as ET
 
 import boto3
@@ -33,6 +32,7 @@ FAKE_MP3_BYTES = b"ID3\x03\x00\x00\x00" + b"\xff" * 200  # minimal fake MP3 head
 # Helpers
 # ─────────────────────────────────────────────
 
+
 def _make_tts_mock() -> MagicMock:
     """Return a mock openai_client whose audio.speech.create streams fake MP3 bytes."""
     mock_client = MagicMock()
@@ -46,6 +46,7 @@ def _make_tts_mock() -> MagicMock:
 def _make_dynamo_stream_event(episode: dict) -> dict:
     """Wrap an episode dict in a DynamoDB Streams INSERT event payload."""
     from boto3.dynamodb.types import TypeSerializer
+
     serializer = TypeSerializer()
     new_image = {k: serializer.serialize(v) for k, v in episode.items()}
     return {
@@ -64,6 +65,7 @@ def _make_dynamo_stream_event(episode: dict) -> dict:
 # ─────────────────────────────────────────────
 # Tests: TTS API integration
 # ─────────────────────────────────────────────
+
 
 class TestTtsApiIntegration:
     """Tests for _generate_tts_with_retry."""
@@ -108,6 +110,7 @@ class TestTtsApiIntegration:
     def test_retries_on_rate_limit(self) -> None:
         """Should retry on RateLimitError and succeed on the second attempt."""
         from openai import RateLimitError
+
         from src.generate_audio import handler as h
 
         mock_client = MagicMock()
@@ -128,6 +131,7 @@ class TestTtsApiIntegration:
     def test_raises_after_max_retries_exhausted(self) -> None:
         """Should raise an exception after all retries are exhausted."""
         from openai import RateLimitError
+
         from src.generate_audio import handler as h
 
         mock_client = MagicMock()
@@ -143,6 +147,7 @@ class TestTtsApiIntegration:
 # ─────────────────────────────────────────────
 # Tests: Audio storage
 # ─────────────────────────────────────────────
+
 
 class TestAudioStorage:
     """Tests for _store_audio."""
@@ -174,13 +179,16 @@ class TestAudioStorage:
         with patch.object(h, "s3_client", s3):
             h._store_audio("audio/2024-01-15/test.mp3", FAKE_MP3_BYTES)
 
-        obj = s3.get_object(Bucket="test-news-summaries", Key="audio/2024-01-15/test.mp3")
+        obj = s3.get_object(
+            Bucket="test-news-summaries", Key="audio/2024-01-15/test.mp3"
+        )
         assert "max-age" in obj["CacheControl"]
 
 
 # ─────────────────────────────────────────────
 # Tests: RSS feed generation
 # ─────────────────────────────────────────────
+
 
 class TestRssFeedGeneration:
     """Tests for _build_rss_xml and _regenerate_rss_feed."""
@@ -237,13 +245,15 @@ class TestRssFeedGeneration:
         """Each <enclosure> element must declare audio/mpeg type."""
         from src.generate_audio.handler import _build_rss_xml
 
-        episodes = [{
-            "episode_id": "uuid-1",
-            "title": "Test",
-            "summary": "Summary",
-            "audio_url": "https://cdn.example.com/ep.mp3",
-            "created_at": "2024-01-15T06:00:00+00:00",
-        }]
+        episodes = [
+            {
+                "episode_id": "uuid-1",
+                "title": "Test",
+                "summary": "Summary",
+                "audio_url": "https://cdn.example.com/ep.mp3",
+                "created_at": "2024-01-15T06:00:00+00:00",
+            }
+        ]
 
         xml_bytes = _build_rss_xml(episodes)
         root = ET.fromstring(xml_bytes)
@@ -261,18 +271,22 @@ class TestRssFeedGeneration:
         s3.create_bucket(Bucket="test-news-summaries")
 
         # Provide a mock list of episodes with audio
-        mock_episodes = [{
-            "episode_id": "uuid-1",
-            "date": "2024-01-15",
-            "title": "Test Episode",
-            "summary": "A short summary.",
-            "audio_url": "https://test.cloudfront.net/audio/2024-01-15/uuid-1.mp3",
-            "created_at": "2024-01-15T06:00:00+00:00",
-        }]
+        mock_episodes = [
+            {
+                "episode_id": "uuid-1",
+                "date": "2024-01-15",
+                "title": "Test Episode",
+                "summary": "A short summary.",
+                "audio_url": "https://test.cloudfront.net/audio/2024-01-15/uuid-1.mp3",
+                "created_at": "2024-01-15T06:00:00+00:00",
+            }
+        ]
 
         with (
             patch.object(h, "s3_client", s3),
-            patch.object(h, "_get_recent_episodes_with_audio", return_value=mock_episodes),
+            patch.object(
+                h, "_get_recent_episodes_with_audio", return_value=mock_episodes
+            ),
         ):
             h._regenerate_rss_feed()
 
@@ -285,6 +299,7 @@ class TestRssFeedGeneration:
 # ─────────────────────────────────────────────
 # Tests: Lambda handler (DynamoDB Streams)
 # ─────────────────────────────────────────────
+
 
 class TestLambdaHandler:
     """Tests for the GenerateAudio lambda_handler with DynamoDB Stream events."""
@@ -332,8 +347,14 @@ class TestLambdaHandler:
 
         event = {
             "Records": [
-                {"eventName": "MODIFY", "dynamodb": {"SequenceNumber": "123", "NewImage": {}}},
-                {"eventName": "REMOVE", "dynamodb": {"SequenceNumber": "456", "NewImage": {}}},
+                {
+                    "eventName": "MODIFY",
+                    "dynamodb": {"SequenceNumber": "123", "NewImage": {}},
+                },
+                {
+                    "eventName": "REMOVE",
+                    "dynamodb": {"SequenceNumber": "456", "NewImage": {}},
+                },
             ]
         }
 
@@ -344,10 +365,11 @@ class TestLambdaHandler:
 
     def test_handler_returns_failed_sequence_numbers_on_error(self) -> None:
         """Failures should appear in batchItemFailures for DLQ retry."""
-        from src.generate_audio import handler as h
-
         # Create a minimal INSERT event with an episode that has no summary
         from boto3.dynamodb.types import TypeSerializer
+
+        from src.generate_audio import handler as h
+
         serializer = TypeSerializer()
         broken_episode = {"episode_id": "broken-uuid", "date": "2024-01-15"}
         new_image = {k: serializer.serialize(v) for k, v in broken_episode.items()}

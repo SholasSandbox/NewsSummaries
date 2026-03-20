@@ -12,7 +12,6 @@ import os
 from unittest.mock import MagicMock, patch
 
 import boto3
-import pytest
 from moto import mock_aws
 
 os.environ.setdefault("S3_BUCKET_NAME", "test-news-summaries")
@@ -24,6 +23,7 @@ os.environ.setdefault("LOG_LEVEL", "DEBUG")
 # ─────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────
+
 
 def _make_openai_mock(summary_json: dict) -> MagicMock:
     """Return a mock openai_client whose chat.completions.create returns the given dict."""
@@ -49,6 +49,7 @@ VALID_AI_RESPONSE = {
 # Tests: OpenAI response parsing
 # ─────────────────────────────────────────────
 
+
 class TestOpenAIResponseParsing:
     """Tests for _validate_summary_result and _generate_summary_with_retry."""
 
@@ -73,7 +74,9 @@ class TestOpenAIResponseParsing:
         """An unrecognised importance value should default to 'medium'."""
         from src.generate_summaries.handler import _validate_summary_result
 
-        result = _validate_summary_result({**VALID_AI_RESPONSE, "importance": "critical"})
+        result = _validate_summary_result(
+            {**VALID_AI_RESPONSE, "importance": "critical"}
+        )
         assert result["importance"] == "medium"
 
     def test_validate_keywords_capped_at_10(self) -> None:
@@ -81,14 +84,19 @@ class TestOpenAIResponseParsing:
         from src.generate_summaries.handler import _validate_summary_result
 
         many_keywords = [f"kw{i}" for i in range(20)]
-        result = _validate_summary_result({**VALID_AI_RESPONSE, "keywords": many_keywords})
+        result = _validate_summary_result(
+            {**VALID_AI_RESPONSE, "keywords": many_keywords}
+        )
         assert len(result["keywords"]) == 10
 
     def test_fallback_summary_uses_raw_content(self) -> None:
         """_fallback_summary should use the article's raw_summary field."""
         from src.generate_summaries.handler import _fallback_summary
 
-        article = {"raw_summary": "Breaking news about something important.", "category": "world"}
+        article = {
+            "raw_summary": "Breaking news about something important.",
+            "category": "world",
+        }
         result = _fallback_summary(article)
         assert result["summary"] == "Breaking news about something important."
         assert result["category"] == "world"
@@ -100,11 +108,13 @@ class TestOpenAIResponseParsing:
 
         mock_client = _make_openai_mock(VALID_AI_RESPONSE)
         with patch.object(h, "openai_client", mock_client):
-            result = h._generate_summary_with_retry({
-                "title": "Test Article",
-                "source": "BBC",
-                "raw_summary": "Test content.",
-            })
+            result = h._generate_summary_with_retry(
+                {
+                    "title": "Test Article",
+                    "source": "BBC",
+                    "raw_summary": "Test content.",
+                }
+            )
 
         mock_client.chat.completions.create.assert_called_once()
         assert result["category"] == "technology"
@@ -114,6 +124,7 @@ class TestOpenAIResponseParsing:
     def test_generate_summary_retries_on_rate_limit(self) -> None:
         """Should retry on RateLimitError and succeed on the second attempt."""
         from openai import RateLimitError
+
         from src.generate_summaries import handler as h
 
         mock_client = MagicMock()
@@ -129,9 +140,13 @@ class TestOpenAIResponseParsing:
         ]
 
         with patch.object(h, "openai_client", mock_client), patch("time.sleep"):
-            result = h._generate_summary_with_retry({
-                "title": "Test", "source": "BBC", "raw_summary": "Content",
-            })
+            result = h._generate_summary_with_retry(
+                {
+                    "title": "Test",
+                    "source": "BBC",
+                    "raw_summary": "Content",
+                }
+            )
 
         assert mock_client.chat.completions.create.call_count == 2
         assert result["summary"] != ""
@@ -159,6 +174,7 @@ class TestOpenAIResponseParsing:
 # Tests: DynamoDB writes
 # ─────────────────────────────────────────────
 
+
 class TestDynamoDBWrites:
     """Tests for _write_dynamodb_episode."""
 
@@ -182,25 +198,31 @@ class TestDynamoDBWrites:
         from src.generate_summaries import handler as h
 
         # Patch the module-level table reference to use our mocked table
-        with patch.object(h, "episodes_table", ddb.Table("test-news-summaries-episodes")):
-            h._write_dynamodb_episode({
-                "episode_id": "test-uuid-1234",
-                "date": "2024-01-15",
-                "created_at": "2024-01-15T06:00:00+00:00",
-                "title": "Test Article",
-                "source": "BBC",
-                "url": "https://bbc.co.uk/test",
-                "article_hash": "abc123",
-                "summary": "Short test summary.",
-                "category": "technology",
-                "importance": "high",
-                "keywords": ["AI"],
-                "raw_s3_key": "raw/2024-01-15/abc123.json",
-                "summary_s3_key": "summaries/2024-01-15/abc123.json",
-            })
+        with patch.object(
+            h, "episodes_table", ddb.Table("test-news-summaries-episodes")
+        ):
+            h._write_dynamodb_episode(
+                {
+                    "episode_id": "test-uuid-1234",
+                    "date": "2024-01-15",
+                    "created_at": "2024-01-15T06:00:00+00:00",
+                    "title": "Test Article",
+                    "source": "BBC",
+                    "url": "https://bbc.co.uk/test",
+                    "article_hash": "abc123",
+                    "summary": "Short test summary.",
+                    "category": "technology",
+                    "importance": "high",
+                    "keywords": ["AI"],
+                    "raw_s3_key": "raw/2024-01-15/abc123.json",
+                    "summary_s3_key": "summaries/2024-01-15/abc123.json",
+                }
+            )
 
         table = ddb.Table("test-news-summaries-episodes")
-        item = table.get_item(Key={"episode_id": "test-uuid-1234", "date": "2024-01-15"})["Item"]
+        item = table.get_item(
+            Key={"episode_id": "test-uuid-1234", "date": "2024-01-15"}
+        )["Item"]
         assert item["title"] == "Test Article"
         assert item["category"] == "technology"
         assert "ttl" in item
@@ -211,11 +233,14 @@ class TestDynamoDBWrites:
 # Tests: End-to-end _process_article
 # ─────────────────────────────────────────────
 
+
 class TestProcessArticle:
     """Integration tests for the _process_article function."""
 
     @mock_aws
-    def test_process_article_writes_summary_to_s3(self, sample_raw_article: dict) -> None:
+    def test_process_article_writes_summary_to_s3(
+        self, sample_raw_article: dict
+    ) -> None:
         """_process_article should write a summary JSON to S3."""
         from src.generate_summaries import handler as h
 
@@ -249,7 +274,9 @@ class TestProcessArticle:
         with (
             patch.object(h, "openai_client", mock_client),
             patch.object(h, "s3_client", s3),
-            patch.object(h, "episodes_table", ddb.Table("test-news-summaries-episodes")),
+            patch.object(
+                h, "episodes_table", ddb.Table("test-news-summaries-episodes")
+            ),
         ):
             outcome = h._process_article("test-news-summaries", s3_key)
 
@@ -263,7 +290,9 @@ class TestProcessArticle:
         assert summary_doc["importance"] == "high"
 
     @mock_aws
-    def test_process_article_skips_if_already_summarised(self, sample_raw_article: dict) -> None:
+    def test_process_article_skips_if_already_summarised(
+        self, sample_raw_article: dict
+    ) -> None:
         """Should return 'skipped' if a summary already exists in S3."""
         from src.generate_summaries import handler as h
 
@@ -276,8 +305,16 @@ class TestProcessArticle:
         summary_key = f"summaries/{run_date}/{article_hash}.json"
 
         # Pre-create both raw and summary objects
-        s3.put_object(Bucket="test-news-summaries", Key=raw_key, Body=json.dumps(sample_raw_article))
-        s3.put_object(Bucket="test-news-summaries", Key=summary_key, Body=json.dumps({"summary": "existing"}))
+        s3.put_object(
+            Bucket="test-news-summaries",
+            Key=raw_key,
+            Body=json.dumps(sample_raw_article),
+        )
+        s3.put_object(
+            Bucket="test-news-summaries",
+            Key=summary_key,
+            Body=json.dumps({"summary": "existing"}),
+        )
 
         with patch.object(h, "s3_client", s3):
             outcome = h._process_article("test-news-summaries", raw_key)
@@ -288,6 +325,7 @@ class TestProcessArticle:
 # ─────────────────────────────────────────────
 # Tests: Error handling
 # ─────────────────────────────────────────────
+
 
 class TestErrorHandling:
     """Tests for error handling in the GenerateSummaries handler."""
@@ -302,7 +340,10 @@ class TestErrorHandling:
 
         with patch.object(h, "s3_client", s3):
             result = h.lambda_handler(
-                {"s3_key": "raw/2024-01-15/nonexistent.json", "bucket": "test-news-summaries"},
+                {
+                    "s3_key": "raw/2024-01-15/nonexistent.json",
+                    "bucket": "test-news-summaries",
+                },
                 MagicMock(),
             )
 

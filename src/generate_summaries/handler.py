@@ -19,20 +19,23 @@ from typing import Any
 
 import boto3
 from botocore.exceptions import ClientError
-from openai import OpenAI, RateLimitError, APIStatusError
+from openai import APIStatusError, OpenAI, RateLimitError
 
 # ---------------------------------------------------------------------------
 # Structured logger
 # ---------------------------------------------------------------------------
 
+
 def _build_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
     if not logger.handlers:
         handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter(
-            '{"time": "%(asctime)s", "level": "%(levelname)s", '
-            '"logger": "%(name)s", "message": %(message)s}'
-        ))
+        handler.setFormatter(
+            logging.Formatter(
+                '{"time": "%(asctime)s", "level": "%(levelname)s", '
+                '"logger": "%(name)s", "message": %(message)s}'
+            )
+        )
         logger.addHandler(handler)
     logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
     return logger
@@ -54,7 +57,7 @@ SUMMARY_SYSTEM_PROMPT = """You are a professional news editor who writes concise
 Your summaries are factual, balanced, and written for an informed adult audience.
 Always respond with valid JSON only."""
 
-SUMMARY_USER_TEMPLATE = """Summarise the following news article in 2-3 sentences. 
+SUMMARY_USER_TEMPLATE = """Summarise the following news article in 2-3 sentences.
 Focus on the most important facts and their significance.
 
 Title: {title}
@@ -101,7 +104,9 @@ def lambda_handler(event: dict, context: Any) -> dict:
             outcome = _process_article(bucket, s3_key)
             results[outcome] += 1
         except Exception as exc:  # noqa: BLE001
-            log.error(json.dumps({"event": "record_error", "key": s3_key, "error": str(exc)}))
+            log.error(
+                json.dumps({"event": "record_error", "key": s3_key, "error": str(exc)})
+            )
             results["failed"] += 1
 
     log.info(json.dumps({"event": "batch_complete", **results}))
@@ -111,6 +116,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
 # ---------------------------------------------------------------------------
 # Record extraction
 # ---------------------------------------------------------------------------
+
 
 def _extract_records(event: dict) -> list[dict[str, str]]:
     """Normalise different event shapes into a list of {bucket, key} dicts."""
@@ -136,6 +142,7 @@ def _extract_records(event: dict) -> list[dict[str, str]]:
 # Article processing
 # ---------------------------------------------------------------------------
 
+
 def _process_article(bucket: str, s3_key: str) -> str:
     """
     Read a raw article from S3, generate a summary, store it, and update DynamoDB.
@@ -155,7 +162,9 @@ def _process_article(bucket: str, s3_key: str) -> str:
     ai_result = _generate_summary_with_retry(raw_article)
 
     episode_id = str(uuid.uuid4())
-    run_date = raw_article.get("run_date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    run_date = raw_article.get(
+        "run_date", datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    )
     created_at = datetime.now(timezone.utc).isoformat()
 
     summary_doc = {
@@ -174,19 +183,24 @@ def _process_article(bucket: str, s3_key: str) -> str:
     _write_s3_json(bucket, summary_key, summary_doc)
     _write_dynamodb_episode(summary_doc)
 
-    log.info(json.dumps({
-        "event": "article_summarised",
-        "episode_id": episode_id,
-        "title": raw_article.get("title", "")[:80],
-        "category": ai_result.get("category"),
-        "importance": ai_result.get("importance"),
-    }))
+    log.info(
+        json.dumps(
+            {
+                "event": "article_summarised",
+                "episode_id": episode_id,
+                "title": raw_article.get("title", "")[:80],
+                "category": ai_result.get("category"),
+                "importance": ai_result.get("importance"),
+            }
+        )
+    )
     return "processed"
 
 
 # ---------------------------------------------------------------------------
 # OpenAI Integration
 # ---------------------------------------------------------------------------
+
 
 def _generate_summary_with_retry(article: dict) -> dict:
     """
@@ -217,12 +231,16 @@ def _generate_summary_with_retry(article: dict) -> dict:
 
         except RateLimitError as exc:
             wait = BASE_BACKOFF ** (attempt + 1)
-            log.warning(json.dumps({
-                "event": "openai_rate_limit",
-                "attempt": attempt + 1,
-                "wait_seconds": wait,
-                "error": str(exc),
-            }))
+            log.warning(
+                json.dumps(
+                    {
+                        "event": "openai_rate_limit",
+                        "attempt": attempt + 1,
+                        "wait_seconds": wait,
+                        "error": str(exc),
+                    }
+                )
+            )
             if attempt < MAX_RETRIES - 1:
                 time.sleep(wait)
             else:
@@ -234,7 +252,15 @@ def _generate_summary_with_retry(article: dict) -> dict:
             return _fallback_summary(article)
 
         except APIStatusError as exc:
-            log.error(json.dumps({"event": "openai_api_error", "status": exc.status_code, "error": str(exc)}))
+            log.error(
+                json.dumps(
+                    {
+                        "event": "openai_api_error",
+                        "status": exc.status_code,
+                        "error": str(exc),
+                    }
+                )
+            )
             if exc.status_code >= 500 and attempt < MAX_RETRIES - 1:
                 time.sleep(BASE_BACKOFF ** (attempt + 1))
                 continue
@@ -245,13 +271,30 @@ def _generate_summary_with_retry(article: dict) -> dict:
 
 def _validate_summary_result(result: dict) -> dict:
     """Ensure the AI response contains required fields; fill defaults if missing."""
-    valid_categories = {"general", "world", "business", "technology", "science", "health", "sports", "entertainment"}
+    valid_categories = {
+        "general",
+        "world",
+        "business",
+        "technology",
+        "science",
+        "health",
+        "sports",
+        "entertainment",
+    }
     valid_importance = {"high", "medium", "low"}
 
     return {
         "summary": str(result.get("summary", "")).strip(),
-        "category": result.get("category", "general") if result.get("category") in valid_categories else "general",
-        "importance": result.get("importance", "medium") if result.get("importance") in valid_importance else "medium",
+        "category": (
+            result.get("category", "general")
+            if result.get("category") in valid_categories
+            else "general"
+        ),
+        "importance": (
+            result.get("importance", "medium")
+            if result.get("importance") in valid_importance
+            else "medium"
+        ),
         "keywords": list(result.get("keywords", []))[:10],
     }
 
@@ -259,7 +302,9 @@ def _validate_summary_result(result: dict) -> dict:
 def _fallback_summary(article: dict) -> dict:
     """Generate a minimal fallback summary when the AI call fails."""
     return {
-        "summary": article.get("raw_summary", article.get("title", "Summary unavailable."))[:500],
+        "summary": article.get(
+            "raw_summary", article.get("title", "Summary unavailable.")
+        )[:500],
         "category": article.get("category", "general"),
         "importance": "medium",
         "keywords": [],
@@ -269,6 +314,7 @@ def _fallback_summary(article: dict) -> dict:
 # ---------------------------------------------------------------------------
 # S3 helpers
 # ---------------------------------------------------------------------------
+
 
 def _s3_object_exists(bucket: str, key: str) -> bool:
     """Return True if the S3 object exists."""
@@ -285,7 +331,16 @@ def _read_s3_json(bucket: str, key: str) -> dict | None:
         response = s3_client.get_object(Bucket=bucket, Key=key)
         return json.loads(response["Body"].read().decode("utf-8"))
     except Exception as exc:  # noqa: BLE001
-        log.error(json.dumps({"event": "s3_read_error", "bucket": bucket, "key": key, "error": str(exc)}))
+        log.error(
+            json.dumps(
+                {
+                    "event": "s3_read_error",
+                    "bucket": bucket,
+                    "key": key,
+                    "error": str(exc),
+                }
+            )
+        )
         return None
 
 
@@ -302,6 +357,7 @@ def _write_s3_json(bucket: str, key: str, data: dict) -> None:
 # ---------------------------------------------------------------------------
 # DynamoDB helpers
 # ---------------------------------------------------------------------------
+
 
 def _write_dynamodb_episode(doc: dict) -> None:
     """Write an episode record to DynamoDB with a 90-day TTL."""

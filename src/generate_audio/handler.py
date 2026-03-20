@@ -21,21 +21,23 @@ from typing import Any
 from xml.etree import ElementTree as ET
 
 import boto3
-from botocore.exceptions import ClientError
-from openai import OpenAI, RateLimitError, APIStatusError
+from openai import APIStatusError, OpenAI, RateLimitError
 
 # ---------------------------------------------------------------------------
 # Structured logger
 # ---------------------------------------------------------------------------
 
+
 def _build_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
     if not logger.handlers:
         handler = logging.StreamHandler(sys.stdout)
-        handler.setFormatter(logging.Formatter(
-            '{"time": "%(asctime)s", "level": "%(levelname)s", '
-            '"logger": "%(name)s", "message": %(message)s}'
-        ))
+        handler.setFormatter(
+            logging.Formatter(
+                '{"time": "%(asctime)s", "level": "%(levelname)s", '
+                '"logger": "%(name)s", "message": %(message)s}'
+            )
+        )
         logger.addHandler(handler)
     logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
     return logger
@@ -51,7 +53,9 @@ DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE_NAME"]
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 CLOUDFRONT_DOMAIN = os.environ.get("CLOUDFRONT_DOMAIN", "")
 PODCAST_TITLE = os.environ.get("PODCAST_TITLE", "News Summaries")
-PODCAST_DESCRIPTION = os.environ.get("PODCAST_DESCRIPTION", "Daily AI-powered news summaries")
+PODCAST_DESCRIPTION = os.environ.get(
+    "PODCAST_DESCRIPTION", "Daily AI-powered news summaries"
+)
 PODCAST_AUTHOR = os.environ.get("PODCAST_AUTHOR", "News Summaries Bot")
 PODCAST_EMAIL = os.environ.get("PODCAST_EMAIL", "podcast@example.com")
 TTS_MODEL = "tts-1"
@@ -106,11 +110,15 @@ def lambda_handler(event: dict, context: Any) -> dict:
             results["processed"] += 1
 
         except Exception as exc:  # noqa: BLE001
-            log.error(json.dumps({
-                "event": "record_error",
-                "sequence_number": sequence_number,
-                "error": str(exc),
-            }))
+            log.error(
+                json.dumps(
+                    {
+                        "event": "record_error",
+                        "sequence_number": sequence_number,
+                        "error": str(exc),
+                    }
+                )
+            )
             batch_item_failures.append({"itemIdentifier": sequence_number})
             results["failed"] += 1
 
@@ -119,7 +127,9 @@ def lambda_handler(event: dict, context: Any) -> dict:
         try:
             _regenerate_rss_feed()
         except Exception as exc:  # noqa: BLE001
-            log.error(json.dumps({"event": "rss_regeneration_error", "error": str(exc)}))
+            log.error(
+                json.dumps({"event": "rss_regeneration_error", "error": str(exc)})
+            )
 
     log.info(json.dumps({"event": "batch_complete", **results}))
     return {"batchItemFailures": batch_item_failures}
@@ -128,6 +138,7 @@ def lambda_handler(event: dict, context: Any) -> dict:
 # ---------------------------------------------------------------------------
 # Episode processing
 # ---------------------------------------------------------------------------
+
 
 def _process_episode(episode: dict) -> None:
     """Generate TTS audio for one episode, store it, and update DynamoDB."""
@@ -161,17 +172,22 @@ def _process_episode(episode: dict) -> None:
 
     _update_episode_audio_url(episode_id, run_date, audio_url, audio_key)
 
-    log.info(json.dumps({
-        "event": "audio_generated",
-        "episode_id": episode_id,
-        "audio_url": audio_url,
-        "bytes": len(audio_bytes),
-    }))
+    log.info(
+        json.dumps(
+            {
+                "event": "audio_generated",
+                "episode_id": episode_id,
+                "audio_url": audio_url,
+                "bytes": len(audio_bytes),
+            }
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
 # OpenAI TTS
 # ---------------------------------------------------------------------------
+
 
 def _generate_tts_with_retry(text: str) -> bytes:
     """
@@ -193,19 +209,31 @@ def _generate_tts_with_retry(text: str) -> bytes:
 
         except RateLimitError as exc:
             wait = BASE_BACKOFF ** (attempt + 1)
-            log.warning(json.dumps({
-                "event": "tts_rate_limit",
-                "attempt": attempt + 1,
-                "wait_seconds": wait,
-                "error": str(exc),
-            }))
+            log.warning(
+                json.dumps(
+                    {
+                        "event": "tts_rate_limit",
+                        "attempt": attempt + 1,
+                        "wait_seconds": wait,
+                        "error": str(exc),
+                    }
+                )
+            )
             if attempt < MAX_RETRIES - 1:
                 time.sleep(wait)
             else:
                 raise
 
         except APIStatusError as exc:
-            log.error(json.dumps({"event": "tts_api_error", "status": exc.status_code, "error": str(exc)}))
+            log.error(
+                json.dumps(
+                    {
+                        "event": "tts_api_error",
+                        "status": exc.status_code,
+                        "error": str(exc),
+                    }
+                )
+            )
             if exc.status_code >= 500 and attempt < MAX_RETRIES - 1:
                 time.sleep(BASE_BACKOFF ** (attempt + 1))
                 continue
@@ -217,6 +245,7 @@ def _generate_tts_with_retry(text: str) -> bytes:
 # ---------------------------------------------------------------------------
 # S3 helpers
 # ---------------------------------------------------------------------------
+
 
 def _store_audio(key: str, audio_bytes: bytes) -> None:
     """Upload MP3 audio bytes to S3."""
@@ -243,7 +272,10 @@ def _read_s3_json(bucket: str, key: str) -> dict | None:
 # DynamoDB helpers
 # ---------------------------------------------------------------------------
 
-def _update_episode_audio_url(episode_id: str, date: str, audio_url: str, audio_key: str) -> None:
+
+def _update_episode_audio_url(
+    episode_id: str, date: str, audio_url: str, audio_key: str
+) -> None:
     """Update the DynamoDB episode record with the generated audio URL."""
     episodes_table.update_item(
         Key={"episode_id": episode_id, "date": date},
@@ -259,6 +291,7 @@ def _update_episode_audio_url(episode_id: str, date: str, audio_url: str, audio_
 def _deserialise_dynamodb_item(item: dict) -> dict:
     """Convert a DynamoDB Streams item (with type descriptors) to a plain dict."""
     from boto3.dynamodb.types import TypeDeserializer
+
     deserializer = TypeDeserializer()
     return {k: deserializer.deserialize(v) for k, v in item.items()}
 
@@ -266,6 +299,7 @@ def _deserialise_dynamodb_item(item: dict) -> dict:
 # ---------------------------------------------------------------------------
 # RSS Feed Generation
 # ---------------------------------------------------------------------------
+
 
 def _regenerate_rss_feed() -> None:
     """
@@ -309,11 +343,14 @@ def _build_rss_xml(episodes: list[dict]) -> bytes:
     ET.register_namespace("itunes", "http://www.itunes.com/dtds/podcast-1.0.dtd")
     ET.register_namespace("content", "http://purl.org/rss/1.0/modules/content/")
 
-    rss = ET.Element("rss", {
-        "version": "2.0",
-        "xmlns:itunes": "http://www.itunes.com/dtds/podcast-1.0.dtd",
-        "xmlns:content": "http://purl.org/rss/1.0/modules/content/",
-    })
+    rss = ET.Element(
+        "rss",
+        {
+            "version": "2.0",
+            "xmlns:itunes": "http://www.itunes.com/dtds/podcast-1.0.dtd",
+            "xmlns:content": "http://purl.org/rss/1.0/modules/content/",
+        },
+    )
 
     channel = ET.SubElement(rss, "channel")
     feed_url = (
@@ -367,14 +404,20 @@ def _add_rss_item(channel: ET.Element, episode: dict) -> None:
     _add_text(item, "pubDate", format_datetime(created_at))
     _add_text(item, "itunes:summary", summary)
     _add_text(item, "itunes:episodeType", "full")
-    ET.SubElement(item, "enclosure", {
-        "url": audio_url,
-        "type": "audio/mpeg",
-        "length": "0",  # length unknown at feed-generation time
-    })
+    ET.SubElement(
+        item,
+        "enclosure",
+        {
+            "url": audio_url,
+            "type": "audio/mpeg",
+            "length": "0",  # length unknown at feed-generation time
+        },
+    )
 
 
-def _add_text(parent: ET.Element, tag: str, text: str, attrib: dict | None = None) -> ET.Element:
+def _add_text(
+    parent: ET.Element, tag: str, text: str, attrib: dict | None = None
+) -> ET.Element:
     """Helper to create a sub-element with text content."""
     el = ET.SubElement(parent, tag, attrib or {})
     el.text = text
