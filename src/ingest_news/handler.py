@@ -63,6 +63,11 @@ RSS_FEEDS: list[dict[str, str]] = [
         "category": "world",
     },
     {
+        "name": "BBC Politics",
+        "url": "http://feeds.bbci.co.uk/news/politics/rss.xml",
+        "category": "politics",
+    },
+    {
         "name": "Reuters Top News",
         "url": "https://feeds.reuters.com/reuters/topNews",
         "category": "general",
@@ -83,9 +88,19 @@ RSS_FEEDS: list[dict[str, str]] = [
         "category": "science",
     },
     {
+        "name": "Reuters Markets",
+        "url": "https://feeds.reuters.com/reuters/businessNews",
+        "category": "markets",
+    },
+    {
         "name": "Associated Press",
         "url": "https://feeds.apnews.com/rss/apf-topnews",
         "category": "general",
+    },
+    {
+        "name": "AP Politics",
+        "url": "https://feeds.apnews.com/rss/apf-politics",
+        "category": "politics",
     },
     {
         "name": "NPR News",
@@ -93,9 +108,24 @@ RSS_FEEDS: list[dict[str, str]] = [
         "category": "general",
     },
     {
+        "name": "NPR Lifestyle",
+        "url": "https://feeds.npr.org/1057/rss.xml",
+        "category": "lifestyle",
+    },
+    {
         "name": "The Guardian World",
         "url": "https://www.theguardian.com/world/rss",
         "category": "world",
+    },
+    {
+        "name": "The Guardian Politics",
+        "url": "https://www.theguardian.com/politics/rss",
+        "category": "politics",
+    },
+    {
+        "name": "The Guardian Life and Style",
+        "url": "https://www.theguardian.com/lifeandstyle/rss",
+        "category": "lifestyle",
     },
     {
         "name": "Ars Technica",

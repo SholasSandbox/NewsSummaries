@@ -170,6 +170,61 @@ class TestListEpisodes:
         assert body["episodes"] == []
         assert body["count"] == 0
 
+    @mock_aws
+    def test_list_episodes_filter_by_category(self) -> None:
+        """GET /episodes?category=politics should use the category-date-index GSI."""
+        ddb = boto3.resource("dynamodb", region_name=TEST_REGION)
+        table = _make_table(ddb)
+        table.put_item(Item=SAMPLE_EPISODE)
+        # Different category – should not appear
+        other = {**SAMPLE_EPISODE, "episode_id": "other-ep-2", "category": "politics"}
+        table.put_item(Item=other)
+
+        from src.episodes_api import handler as h
+
+        h.dynamodb = ddb
+        h.episodes_table = ddb.Table(TEST_TABLE)
+
+        event = _make_apigw_event(
+            "GET", "/episodes", query_params={"category": "technology"}
+        )
+        result = h.lambda_handler(event, {})
+
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["category_filter"] == "technology"
+        assert all(ep["category"] == "technology" for ep in body["episodes"])
+
+    @mock_aws
+    def test_list_episodes_filter_by_category_and_date(self) -> None:
+        """GET /episodes?category=markets&date=2024-01-15 should filter by both."""
+        ddb = boto3.resource("dynamodb", region_name=TEST_REGION)
+        table = _make_table(ddb)
+        markets_ep = {**SAMPLE_EPISODE, "episode_id": "markets-ep-1", "category": "markets"}
+        table.put_item(Item=markets_ep)
+        # Same category, different date
+        other_date = {**markets_ep, "episode_id": "markets-ep-2", "date": "2024-01-16"}
+        table.put_item(Item=other_date)
+
+        from src.episodes_api import handler as h
+
+        h.dynamodb = ddb
+        h.episodes_table = ddb.Table(TEST_TABLE)
+
+        event = _make_apigw_event(
+            "GET",
+            "/episodes",
+            query_params={"category": "markets", "date": "2024-01-15"},
+        )
+        result = h.lambda_handler(event, {})
+
+        assert result["statusCode"] == 200
+        body = json.loads(result["body"])
+        assert body["category_filter"] == "markets"
+        assert body["date_filter"] == "2024-01-15"
+        assert all(ep["category"] == "markets" for ep in body["episodes"])
+        assert all(ep["date"] == "2024-01-15" for ep in body["episodes"])
+
 
 # ─────────────────────────────────────────────
 # Tests: Get Single Episode  GET /episodes/{id}
