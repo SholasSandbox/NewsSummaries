@@ -216,3 +216,9 @@ dist/
 plan.txt
 terraform.tfstate
 terraform.tfstate.backup
+
+# Next.js web app
+web/.next/
+web/node_modules/
+web/.env.local
+web/.env.*.local
