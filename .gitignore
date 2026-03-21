@@ -216,3 +216,12 @@ dist/
 plan.txt
 terraform.tfstate
 terraform.tfstate.backup
+
+# Next.js web app
+web/.next/
+web/node_modules/
+web/.env.local
+web/.env.*.local
+# Un-ignore web/lib/ — the root `lib/` rule above (Python packaging) would otherwise swallow it
+!web/lib/
+!web/lib/**

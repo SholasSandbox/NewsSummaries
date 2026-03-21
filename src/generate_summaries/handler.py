@@ -67,7 +67,7 @@ Content: {content}
 Respond ONLY with this JSON structure:
 {{
   "summary": "2-3 sentence summary here",
-  "category": "one of: general|world|business|technology|science|health|sports|entertainment",
+  "category": "one of: general|world|business|technology|science|health|sports|entertainment|markets|lifestyle|politics",
   "importance": "one of: high|medium|low",
   "keywords": ["keyword1", "keyword2", "keyword3"]
 }}"""
@@ -280,6 +280,9 @@ def _validate_summary_result(result: dict) -> dict:
         "health",
         "sports",
         "entertainment",
+        "markets",
+        "lifestyle",
+        "politics",
     }
     valid_importance = {"high", "medium", "low"}
 
@@ -378,6 +381,7 @@ def _write_dynamodb_episode(doc: dict) -> None:
             "raw_s3_key": doc.get("raw_s3_key", ""),
             "summary_s3_key": doc.get("summary_s3_key", ""),
             "audio_url": None,
+            "status": "summarized",
             "ttl": ttl,
         }
     )

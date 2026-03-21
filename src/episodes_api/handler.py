@@ -143,13 +143,28 @@ def _list_episodes(query_params: dict) -> dict:
     Return a paginated list of episodes, newest first.
 
     Query parameters:
-      date  – filter by YYYY-MM-DD run date (uses date-created_at-index GSI)
-      limit – max results to return (default 20, max 100)
+      date     – filter by YYYY-MM-DD run date (uses date-created_at-index GSI)
+      category – filter by category (uses category-date-index GSI)
+      limit    – max results to return (default 20, max 100)
     """
     limit = min(int(query_params.get("limit", DEFAULT_PAGE_LIMIT)), MAX_PAGE_LIMIT)
     date_filter = query_params.get("date")
+    category_filter = query_params.get("category")
 
-    if date_filter:
+    if category_filter:
+        # Use the category-date-index GSI to retrieve episodes for a specific category
+        query_kwargs: dict = {
+            "IndexName": "category-date-index",
+            "KeyConditionExpression": Key("category").eq(category_filter),
+            "ScanIndexForward": False,  # newest first
+            "Limit": limit,
+        }
+        if date_filter:
+            query_kwargs["KeyConditionExpression"] = (
+                Key("category").eq(category_filter) & Key("date").eq(date_filter)
+            )
+        response = episodes_table.query(**query_kwargs)
+    elif date_filter:
         # Use the date-created_at-index GSI to retrieve episodes for a specific date
         response = episodes_table.query(
             IndexName="date-created_at-index",
@@ -166,16 +181,26 @@ def _list_episodes(query_params: dict) -> dict:
 
     episodes = response.get("Items", [])
     # Sort by created_at descending when scanning without a GSI
-    if not date_filter:
+    if not date_filter and not category_filter:
         episodes.sort(key=lambda x: x.get("created_at", ""), reverse=True)
 
-    log.info(json.dumps({"event": "episodes_listed", "count": len(episodes)}))
+    log.info(
+        json.dumps(
+            {
+                "event": "episodes_listed",
+                "count": len(episodes),
+                "category_filter": category_filter,
+                "date_filter": date_filter,
+            }
+        )
+    )
     return _response(
         200,
         {
             "episodes": [_serialise_episode(ep) for ep in episodes],
             "count": len(episodes),
             "date_filter": date_filter,
+            "category_filter": category_filter,
         },
     )
 

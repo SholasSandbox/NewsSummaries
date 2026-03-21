@@ -1,5 +1,5 @@
 <mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36" version="29.0.3">
-  <diagram name="Page-1" id="L3zlEbaJQi9qudh6UswT">
+  <diagram name="OpenAI-API-Edition" id="L3zlEbaJQi9qudh6UswT">
     <mxGraphModel dx="1665" dy="777" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
       <root>
         <mxCell id="0" />
@@ -235,7 +235,7 @@
         <mxCell id="WfmK3D_Fio5ZgeCk6Whs-9" value="" style="sketch=0;pointerEvents=1;shadow=0;dashed=0;html=1;strokeColor=none;fillColor=#505050;labelPosition=center;verticalLabelPosition=bottom;outlineConnect=0;verticalAlign=top;align=center;shape=mxgraph.office.clouds.cloud;movable=1;resizable=1;rotatable=1;deletable=1;editable=1;locked=0;connectable=1;" parent="1" vertex="1">
           <mxGeometry x="448" y="481.16999999999996" width="90" height="56.018518518518526" as="geometry" />
         </mxCell>
-        <mxCell id="AcHef5TYvR0VwFDZ75DH-28" value="Architecture v1.0 – News Podcast Serverless Pipeline" style="text;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+        <mxCell id="AcHef5TYvR0VwFDZ75DH-28" value="Architecture v2.0 – OpenAI API Edition (o3-mini + TTS-1 + text-embedding-3-small + Claude Sonnet 4.5)" style="text;whiteSpace=wrap;html=1;" parent="1" vertex="1">
           <mxGeometry x="1940" y="1550" width="320" height="40" as="geometry" />
         </mxCell>
         <mxCell id="AcHef5TYvR0VwFDZ75DH-31" value="Store episodes&amp;nbsp;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;+ metadata&lt;/span&gt;" style="text;whiteSpace=wrap;html=1;" parent="1" vertex="1">

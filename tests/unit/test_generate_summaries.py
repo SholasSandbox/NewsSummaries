@@ -70,6 +70,14 @@ class TestOpenAIResponseParsing:
         result = _validate_summary_result({**VALID_AI_RESPONSE, "category": "gossip"})
         assert result["category"] == "general"
 
+    def test_validate_new_categories_are_accepted(self) -> None:
+        """markets, lifestyle, and politics should be accepted as valid categories."""
+        from src.generate_summaries.handler import _validate_summary_result
+
+        for cat in ("markets", "lifestyle", "politics"):
+            result = _validate_summary_result({**VALID_AI_RESPONSE, "category": cat})
+            assert result["category"] == cat, f"Category '{cat}' should be accepted"
+
     def test_validate_unknown_importance_defaults_to_medium(self) -> None:
         """An unrecognised importance value should default to 'medium'."""
         from src.generate_summaries.handler import _validate_summary_result
@@ -227,6 +235,7 @@ class TestDynamoDBWrites:
         assert item["category"] == "technology"
         assert "ttl" in item
         assert item["audio_url"] is None
+        assert item["status"] == "summarized"
 
 
 # ─────────────────────────────────────────────
