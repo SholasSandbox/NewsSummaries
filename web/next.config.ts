@@ -1,12 +1,9 @@
 import type { NextConfig } from "next"
 
 const nextConfig: NextConfig = {
-  // Treat the web/ sub-directory as the project root.
-  // The app runs as a self-contained Next.js application.
-  experimental: {
-    // Edge Runtime functions may call external APIs (Firecrawl, Anthropic, Supabase, OpenAI).
-    // Allow all origins; tighten per-route if needed.
-  },
+  // The web/ sub-directory runs as a self-contained Next.js 16 application.
+  // AWS SDK v3 requires the Node.js runtime (not Edge) for Lambda + S3 + DynamoDB calls.
+  experimental: {},
 }
 
 export default nextConfig
