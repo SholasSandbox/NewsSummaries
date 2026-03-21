@@ -23,7 +23,7 @@ const PIPELINE_STEPS = [
   { icon: "⚡", label: "Lambda Summarise",detail: "Lambda 2 → OpenAI o3-mini per article"             },
   { icon: "📖", label: "Read Summaries",  detail: "S3 summaries/{date}/{hash}.json"                    },
   { icon: "🧠", label: "Distil",          detail: "Claude Sonnet 4.5 — Unified Market Intelligence"   },
-  { icon: "🔢", label: "Embed",           detail: "OpenAI text-embedding-3-small (1 536 dims)"        },
+  { icon: "🔢", label: "Embed",           detail: "OpenAI text-embedding-3-small (1536 dims)"        },
   { icon: "💾", label: "Store",           detail: "S3 unified/{date}/{id}.json + DynamoDB metadata"   },
 ]
 
