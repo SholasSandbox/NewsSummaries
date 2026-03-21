@@ -11,13 +11,13 @@ You are an expert in LLM orchestration, RAG pipelines, and modern UI/UX for news
 - **Backend:** Node.js (Edge Runtime), Supabase for vector storage.
 - **LLM Logic:** Focus on "Distillation" – how to compress 10 articles into one cohesive summary without losing key entities.
 
-## 2026 Model Flags
-- **Style:** "Vibe Coding." Prioritize clean, aesthetic UI components and intuitive UX.
-- **Efficiency:** Use the "Compaction" flag to summarize previous chat history while maintaining deep focus on the current file.
-- **Multi-file edits:** You are encouraged to propose changes to multiple files in a single turn.
-
 ## Architectural Source of Truth (AWS Native)
 - **Database:** ABSOLUTELY NO SUPABASE. Use existing **DynamoDB** for app state and **S3 + Athena** for the data lake.
 - **Compute:** Do not rewrite Python logic in Node.js. The Next.js app is a "Consumer." Use the **AWS SDK v3** to invoke existing **Python Lambda functions**.
 - **Data Flow:** Next.js -> AWS SDK -> Lambda (Python) -> S3/DynamoDB.
 - **Verification Rule:** Before suggesting any new file, check if an existing AWS service or Python Lambda already performs that role.
+
+## 2026 Model Flags
+- **Style:** "Vibe Coding." Prioritize clean, aesthetic UI components and intuitive UX.
+- **Efficiency:** Use the "Compaction" flag to summarize previous chat history while maintaining deep focus on the current file.
+- **Multi-file edits:** You are encouraged to propose changes to multiple files in a single turn.
