@@ -7,6 +7,7 @@
  */
 "use client"
 
+import Link from "next/link"
 import { useState } from "react"
 
 const EXAMPLE_URLS = [
@@ -99,9 +100,20 @@ export default function Home() {
               <h1 className="text-lg font-semibold text-white leading-tight">News Summaries</h1>
             </div>
           </div>
-          <span className="rounded-full bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300 ring-1 ring-indigo-500/20">
-            Market Intelligence Pipeline
-          </span>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/podcast"
+              className="rounded-xl border border-white/10 px-3 py-1.5 text-xs text-gray-400 hover:border-indigo-500/30 hover:text-indigo-300 transition"
+            >
+              🎙️ Podcast
+            </Link>
+            <Link
+              href="/admin"
+              className="rounded-xl border border-white/10 px-3 py-1.5 text-xs text-gray-400 hover:border-indigo-500/30 hover:text-indigo-300 transition"
+            >
+              Admin
+            </Link>
+          </div>
         </div>
       </header>
 

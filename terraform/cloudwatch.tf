@@ -98,6 +98,7 @@ resource "aws_cloudwatch_dashboard" "main" {
             ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.ingest_news.function_name],
             ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.generate_summaries.function_name],
             ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.generate_audio.function_name],
+            ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.episodes_api.function_name],
           ]
         }
       },
@@ -112,20 +113,22 @@ resource "aws_cloudwatch_dashboard" "main" {
             ["AWS/Lambda", "Errors", "FunctionName", aws_lambda_function.ingest_news.function_name],
             ["AWS/Lambda", "Errors", "FunctionName", aws_lambda_function.generate_summaries.function_name],
             ["AWS/Lambda", "Errors", "FunctionName", aws_lambda_function.generate_audio.function_name],
+            ["AWS/Lambda", "Errors", "FunctionName", aws_lambda_function.episodes_api.function_name],
           ]
         }
       },
       {
         type = "metric"
         properties = {
-          title  = "Lambda Duration (avg ms)"
+          title  = "Lambda Duration p99 (ms)"
           period = 3600
-          stat   = "Average"
+          stat   = "p99"
           view   = "timeSeries"
           metrics = [
             ["AWS/Lambda", "Duration", "FunctionName", aws_lambda_function.ingest_news.function_name],
             ["AWS/Lambda", "Duration", "FunctionName", aws_lambda_function.generate_summaries.function_name],
             ["AWS/Lambda", "Duration", "FunctionName", aws_lambda_function.generate_audio.function_name],
+            ["AWS/Lambda", "Duration", "FunctionName", aws_lambda_function.episodes_api.function_name],
           ]
         }
       },
@@ -140,6 +143,20 @@ resource "aws_cloudwatch_dashboard" "main" {
             ["AWS/SQS", "NumberOfMessagesSent", "QueueName", aws_sqs_queue.ingest_dlq.name],
             ["AWS/SQS", "NumberOfMessagesSent", "QueueName", aws_sqs_queue.summaries_dlq.name],
             ["AWS/SQS", "NumberOfMessagesSent", "QueueName", aws_sqs_queue.audio_dlq.name],
+          ]
+        }
+      },
+      {
+        type = "metric"
+        properties = {
+          title  = "CloudFront Requests"
+          period = 3600
+          stat   = "Sum"
+          view   = "timeSeries"
+          metrics = [
+            ["AWS/CloudFront", "Requests", "DistributionId", aws_cloudfront_distribution.cdn.id, "Region", "Global"],
+            ["AWS/CloudFront", "4xxErrorRate", "DistributionId", aws_cloudfront_distribution.cdn.id, "Region", "Global"],
+            ["AWS/CloudFront", "5xxErrorRate", "DistributionId", aws_cloudfront_distribution.cdn.id, "Region", "Global"],
           ]
         }
       },

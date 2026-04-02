@@ -9,6 +9,7 @@
  */
 "use client"
 
+import Link from "next/link"
 import { useEffect, useState } from "react"
 
 interface Episode {
@@ -114,12 +115,18 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <a
+            <Link
               href="/"
               className="rounded-xl border border-white/10 px-3 py-1.5 text-xs text-gray-400 hover:border-indigo-500/30 hover:text-indigo-300 transition"
             >
               ← Ingest Pipeline
-            </a>
+            </Link>
+            <Link
+              href="/podcast"
+              className="rounded-xl border border-white/10 px-3 py-1.5 text-xs text-gray-400 hover:border-indigo-500/30 hover:text-indigo-300 transition"
+            >
+              🎙️ Podcast
+            </Link>
             <button
               onClick={() => void fetchEpisodes()}
               disabled={loading}
