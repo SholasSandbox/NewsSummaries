@@ -225,3 +225,6 @@ web/.env.*.local
 # Un-ignore web/lib/ — the root `lib/` rule above (Python packaging) would otherwise swallow it
 !web/lib/
 !web/lib/**
+# Un-ignore web/__tests__/lib/ — same root `lib/` rule would swallow test subdirectory
+!web/__tests__/lib/
+!web/__tests__/lib/**
