@@ -155,6 +155,17 @@ resource "aws_cloudwatch_dashboard" "main" {
           view   = "timeSeries"
           metrics = [
             ["AWS/CloudFront", "Requests", "DistributionId", aws_cloudfront_distribution.cdn.id, "Region", "Global"],
+          ]
+        }
+      },
+      {
+        type = "metric"
+        properties = {
+          title  = "CloudFront Error Rates (%)"
+          period = 3600
+          stat   = "Average"
+          view   = "timeSeries"
+          metrics = [
             ["AWS/CloudFront", "4xxErrorRate", "DistributionId", aws_cloudfront_distribution.cdn.id, "Region", "Global"],
             ["AWS/CloudFront", "5xxErrorRate", "DistributionId", aws_cloudfront_distribution.cdn.id, "Region", "Global"],
           ]

@@ -202,7 +202,7 @@ export default function PodcastPage() {
             <span className="bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent"> AI Briefings</span>
           </h2>
           <p className="mx-auto max-w-2xl text-base text-gray-400">
-            Concise news episodes synthesised from top sources by Claude Sonnet 4.5, converted
+            Concise news episodes synthesized from top sources by Claude Sonnet 4.5, converted
             to audio by OpenAI TTS, and delivered fresh every morning and evening.
           </p>
         </div>
@@ -249,9 +249,9 @@ export default function PodcastPage() {
         {!loading && (
           <div className="mb-10 grid grid-cols-3 gap-3">
             {[
-              { label: "Total Episodes", value: episodes.length, color: "text-white" },
-              { label: "With Audio",     value: withAudio.length, color: "text-violet-400" },
-              { label: "Ready to Play",  value: withAudio.length, color: "text-emerald-400" },
+              { label: "Total Episodes",   value: episodes.length,    color: "text-white"         },
+              { label: "With Audio",       value: withAudio.length,   color: "text-violet-400"    },
+              { label: "No Audio Yet",     value: episodes.length - withAudio.length, color: "text-amber-400" },
             ].map((s) => (
               <div key={s.label} className="rounded-xl border border-white/8 bg-white/2 px-4 py-4 text-center">
                 <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
