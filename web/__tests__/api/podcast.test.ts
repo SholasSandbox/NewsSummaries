@@ -57,22 +57,19 @@ const SAMPLE_EPISODES = [
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe("GET /api/podcast", () => {
-  const originalEnv = process.env
-
   beforeEach(() => {
-    // Reset env and mock state before each test
-    process.env = { ...originalEnv }
     vi.clearAllMocks()
   })
 
   afterEach(() => {
-    process.env = originalEnv
+    // Restore CLOUDFRONT_DOMAIN after each test that may have mutated it
+    vi.unstubAllEnvs()
   })
 
   // ── Success path ────────────────────────────────────────────────────────
 
   it("returns 200 with episodes and feed_url when CLOUDFRONT_DOMAIN is set", async () => {
-    process.env.CLOUDFRONT_DOMAIN = "d1234.cloudfront.net"
+    vi.stubEnv("CLOUDFRONT_DOMAIN", "d1234.cloudfront.net")
     mockListEpisodes.mockResolvedValue(SAMPLE_EPISODES)
 
     const res = await GET(makeRequest())
@@ -85,7 +82,7 @@ describe("GET /api/podcast", () => {
   })
 
   it("calls listEpisodes with limit 50", async () => {
-    process.env.CLOUDFRONT_DOMAIN = "d1234.cloudfront.net"
+    vi.stubEnv("CLOUDFRONT_DOMAIN", "d1234.cloudfront.net")
     mockListEpisodes.mockResolvedValue([])
 
     await GET(makeRequest())
@@ -95,7 +92,7 @@ describe("GET /api/podcast", () => {
   })
 
   it("returns feed_url as null when CLOUDFRONT_DOMAIN is not set", async () => {
-    delete process.env.CLOUDFRONT_DOMAIN
+    vi.stubEnv("CLOUDFRONT_DOMAIN", "")
     mockListEpisodes.mockResolvedValue([])
 
     const res = await GET(makeRequest())
@@ -107,7 +104,7 @@ describe("GET /api/podcast", () => {
   })
 
   it("returns feed_url as null when CLOUDFRONT_DOMAIN is empty string", async () => {
-    process.env.CLOUDFRONT_DOMAIN = ""
+    vi.stubEnv("CLOUDFRONT_DOMAIN", "")
     mockListEpisodes.mockResolvedValue([])
 
     const res = await GET(makeRequest())
@@ -117,7 +114,7 @@ describe("GET /api/podcast", () => {
   })
 
   it("returns empty episodes array when table is empty", async () => {
-    process.env.CLOUDFRONT_DOMAIN = "d1234.cloudfront.net"
+    vi.stubEnv("CLOUDFRONT_DOMAIN", "d1234.cloudfront.net")
     mockListEpisodes.mockResolvedValue([])
 
     const res = await GET(makeRequest())
@@ -130,7 +127,7 @@ describe("GET /api/podcast", () => {
   // ── feed_url construction ────────────────────────────────────────────────
 
   it("builds the feed_url by appending /rss/feed.xml to the domain", async () => {
-    process.env.CLOUDFRONT_DOMAIN = "abc123xyz.cloudfront.net"
+    vi.stubEnv("CLOUDFRONT_DOMAIN", "abc123xyz.cloudfront.net")
     mockListEpisodes.mockResolvedValue([])
 
     const res = await GET(makeRequest())
@@ -142,7 +139,7 @@ describe("GET /api/podcast", () => {
   // ── Error handling ───────────────────────────────────────────────────────
 
   it("returns 500 with success:false when listEpisodes throws", async () => {
-    process.env.CLOUDFRONT_DOMAIN = "d1234.cloudfront.net"
+    vi.stubEnv("CLOUDFRONT_DOMAIN", "d1234.cloudfront.net")
     mockListEpisodes.mockRejectedValue(new Error("DynamoDB connection timeout"))
 
     const res = await GET(makeRequest())
@@ -155,7 +152,7 @@ describe("GET /api/podcast", () => {
   })
 
   it("still includes feed_url in 500 error response", async () => {
-    process.env.CLOUDFRONT_DOMAIN = "d1234.cloudfront.net"
+    vi.stubEnv("CLOUDFRONT_DOMAIN", "d1234.cloudfront.net")
     mockListEpisodes.mockRejectedValue(new Error("network error"))
 
     const res = await GET(makeRequest())
@@ -166,7 +163,7 @@ describe("GET /api/podcast", () => {
   })
 
   it("returns feed_url:null in 500 response when CLOUDFRONT_DOMAIN is not set", async () => {
-    delete process.env.CLOUDFRONT_DOMAIN
+    vi.stubEnv("CLOUDFRONT_DOMAIN", "")
     mockListEpisodes.mockRejectedValue(new Error("DYNAMODB_TABLE_NAME env var is not set"))
 
     const res = await GET(makeRequest())

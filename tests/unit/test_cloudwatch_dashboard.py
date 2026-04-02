@@ -76,7 +76,7 @@ def lambda_functions_in_widget(block: str) -> list[str]:
     inside a widget's metrics array (e.g. 'aws_lambda_function.episodes_api').
     """
     return re.findall(
-        r'aws_lambda_function\.([a-z_]+)\.function_name',
+        r'aws_lambda_function\.([a-zA-Z0-9_]+)\.function_name',
         block,
     )
 

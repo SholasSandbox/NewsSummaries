@@ -10,7 +10,12 @@
  */
 import "@testing-library/jest-dom"
 
-// Set env vars before any modules are imported so module-level constants
-// (captured with `?? ""` at load time) see the correct test values.
-process.env.DYNAMODB_TABLE_NAME = "test-episodes"
-process.env.AWS_REGION = "us-east-1"
+// Guard: these stubs must only apply in the test environment.
+// Vitest always sets NODE_ENV=test, so this check prevents accidental
+// bleed if the file is ever imported outside of a test runner context.
+if (process.env.NODE_ENV === "test") {
+  // Set env vars before any modules are imported so module-level constants
+  // (captured with `?? ""` at load time) see the correct test values.
+  process.env.DYNAMODB_TABLE_NAME = "test-episodes"
+  process.env.AWS_REGION = "us-east-1"
+}

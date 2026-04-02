@@ -25,7 +25,10 @@ const { mockSend } = vi.hoisted(() => ({
 
 // ── Mock the entire AWS SDK before importing lib/dynamo ──────────────────────
 vi.mock("@aws-sdk/client-dynamodb", () => ({
-  // Must be a regular function (not arrow) so it can be used with `new`
+  // Must be a regular function (not arrow) so it can be used with `new`.
+  // The mock client body is an empty object {} — it does not need any methods
+  // because DynamoDBDocumentClient.from() is also mocked below and returns
+  // the real `send` spy directly, bypassing the raw client entirely.
   DynamoDBClient: vi.fn().mockImplementation(function () { return {} }),
 }))
 
