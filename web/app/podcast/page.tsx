@@ -202,7 +202,7 @@ export default function PodcastPage() {
             <span className="bg-gradient-to-r from-indigo-400 to-violet-400 bg-clip-text text-transparent"> AI Briefings</span>
           </h2>
           <p className="mx-auto max-w-2xl text-base text-gray-400">
-            Concise news episodes synthesized from top sources by Claude Sonnet 4.5, converted
+            Concise news episodes synthesized from top sources by Claude Sonnet, converted
             to audio by OpenAI TTS, and delivered fresh every morning and evening.
           </p>
         </div>

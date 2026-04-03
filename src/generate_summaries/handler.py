@@ -49,7 +49,7 @@ log = _build_logger(__name__)
 S3_BUCKET = os.environ["S3_BUCKET_NAME"]
 DYNAMODB_TABLE = os.environ["DYNAMODB_TABLE_NAME"]
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-OPENAI_MODEL = "o3-mini"
+OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "o3-mini")
 MAX_RETRIES = 3
 BASE_BACKOFF = 2  # seconds
 

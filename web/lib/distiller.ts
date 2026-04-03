@@ -1,7 +1,7 @@
 /**
  * lib/distiller.ts
  *
- * Claude Sonnet 4.5 distillation helper.
+ * Claude Sonnet distillation helper.
  *
  * Logic Path: After Lambda 2 has summarised each article individually with
  * o3-mini, this module makes a single Anthropic API call to synthesise all
@@ -13,7 +13,7 @@
 import Anthropic from "@anthropic-ai/sdk"
 import type { ScrapedArticle } from "./types"
 
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-5"
+const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6"
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? "" })
 
